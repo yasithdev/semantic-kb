@@ -21,15 +21,18 @@ db_api.truncate_tables()
 
 # Extract data from phrase and insert into KB
 print('INSERTING DATA')
-phrase_sets = text_parser.extract_phrase_sets(sample_content)
-for phrase_set in phrase_sets:
-    triple_set = text_parser.generate_triples(phrase_set)
-    db_api.insert_triple_set(triple_set, context)
-print('DONE!')
+all_entities = set()
+for parametrized_sentence in text_parser.parametrize_text(sample_content):
+    db_api.insert_sentence(parametrized_sentence)
+    for entity in parametrized_sentence[1]:
+        all_entities.add(entity)
+print('DONE! Total Entities - %d' % len(list(all_entities)))
 
 print('CALCULATING FRAMES FOR RELATIONS')
-for relation in db_api.get_all_relations():
-    frames = text_parser.get_frames(relation[1])
-    db_api.add_frames_relation(relation[0], frames)
-    # print('.', end=" ")
-print('DONE!')
+all_frames = set()
+for sentence in db_api.get_all_sentences():
+    sent_frames = text_parser.get_frames(sentence[1])
+    db_api.insert_frames(sentence[0], sent_frames)
+    for frame in sent_frames:
+        all_frames.add(frame)
+print('DONE! Total Frames - %d' % len(list(all_frames)))

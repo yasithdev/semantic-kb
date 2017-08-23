@@ -39,5 +39,6 @@ class App:
     def start(self):
         self.app.run()
 
+
 if __name__ == "__main__":
     App().start()

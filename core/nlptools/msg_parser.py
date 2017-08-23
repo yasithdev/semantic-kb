@@ -1,10 +1,7 @@
-from nltk.tag import pos_tag
-
 from core.nlptools import common
 
 
 class MessageParser:
-
     @staticmethod
     def parse(input_text: str):
         question = False
@@ -14,8 +11,9 @@ class MessageParser:
         input_text = common.sanitize(input_text)
         input_sentences = common.sent_tokenize(input_text)
         for sentence in input_sentences:
-            input_tokens = common.word_tokenize(sentence)
-            pos_tagged_tokens = pos_tag(input_tokens)
+            pos_tagged_tokens = common.pos_tag(sentence)
+            print(pos_tagged_tokens)
+            pass
             # Check if the tokens in a sentence belong to a question or a statement
             for token in pos_tagged_tokens:
                 if token[1][0] == 'W':

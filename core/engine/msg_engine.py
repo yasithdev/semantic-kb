@@ -33,13 +33,12 @@ class MessageEngine:
 
             nouns = self.extract_entities(pos_tagged_tokens)
             frames = self.text_parser.get_frames(sentence_text)
-            print((nouns, frames))
 
             # TODO - Causes error if not checked. Look for alternative way
             if len(frames) == 0:
                 return default_fallback
 
-            answer = ' '.join(self.api.query_recursive(nouns, frames))
+            answer = ' '.join(self.api.query_sentences(nouns, frames))
 
             if len(answer) == 0:
                 return default_fallback

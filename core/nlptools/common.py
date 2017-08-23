@@ -1,19 +1,29 @@
 import re
 
 from nltk.corpus import wordnet
+from nltk.util import breadth_first
+
+from core.api import StanfordAPI
 
 
-def flatten_tree(tree_node, accepted_labels):
-    phrase = ""
-    try:
-        tree_node.label()
-    except AttributeError:
-        pass
-    else:
-        if tree_node.label() in accepted_labels:
-            phrase = " ".join([x[0] for x in tree_node.leaves()])
-        if phrase != "" and len(phrase) > 1:
-            yield (phrase.strip().replace(" ' ", ""), tree_node.label())
+def process_sentence(tree):
+    entities = []
+    sentence = ''
+    for x in breadth_first(tree, maxdepth=2):
+        try:
+            if x.label() == 'S':
+                continue
+        except AttributeError:
+            pass
+        else:
+            if x.label() == 'ENT':
+                entity = " ".join([x[0] for x in x.leaves()])
+                sentence = sentence.replace(entity, '[#%s]' % len(entities))
+                entities.append(entity)
+            elif x.label() in ['VP', 'NP']:
+                sentence = ' '.join([sentence] + [' '.join([p[0] for p in x.leaves()])])
+
+    yield sentence.strip().replace(" ' ", ""), entities
 
 
 def get_wordnet_pos(treebank_tag: str):
@@ -29,14 +39,24 @@ def get_wordnet_pos(treebank_tag: str):
         return ''
 
 
+def pos_tag(sentence: str):
+    pos_tagged_string = StanfordAPI().pos_tag(sentence)
+    return [tuple(x.split('_')) for x in str(pos_tagged_string, 'ascii').strip().split()]
+
+
 def sanitize(word: str):
     result = []
+    is_last_num_numeric = False
     for c in word:
         if c.isalpha():
             result += [c]
-        elif len(result) > 0 and result[-1] != '':
+            is_last_num_numeric = False
+        elif c.isnumeric() and not is_last_num_numeric:
+            is_last_num_numeric = True
+            result += 'ENT'
+        elif len(result) > 0 and result[-1] != ' ':
             result += [' ']
-    return ''.join(result)
+    return ''.join(result).replace('LRB', '(').replace('RRB', ')')
 
 
 def sent_tokenize(input: str):
