@@ -1,0 +1,62 @@
+The ESB profile includes message builders for text-based and binary content. WSO2 EI consists of two conceptual components.The ESB profile handles short-running integration flows while the business process profile handles long-running stateful business processes. Following are definitions of some of the concepts and terminology associated with the ESB and business process profiles.
+
+The ESB profile shipped with WSO2 EI comprises of the following high level components:
+
+A transport is responsible for carrying messages that are in a specific format. The ESB profile supports all the widely used transports including HTTP/s, JMS, VFS and domain-specific transports like FIX. You can easily add a new transport using the Axis2 transport framework and plug it into the ESB profile. Each transport provides a receiver, which the ESB profile uses to receive messages, and a sender, which it uses to send messages. The transport receivers and senders are independent of the ESB profile core.
+
+When a message comes into the ESB profile, the receiving transport selects a message builder based on the message's content type. It uses that builder to process the message's raw payload data and convert it into common XML, which the ESB profile mediation engine can then read and understand. The ESB profile includes message builders for text-based and binary content.
+Conversely, before a transport sends a message out from the ESB profile, a message formatter is used to build the outgoing stream from the message back into its original format. As with message builders, the message formatter is selected based on the message's content type.
+
+You can implement new message builders and formatters using the Axis2 framework.
+
+An endpoint defines an external destination for a message. An endpoint can connect to any external service after configuring it with any attributes or semantics needed for communicating with that service. For example, an endpoint could represent a URL, a mailbox, a JMS queue, or a TCP socket, along with the settings needed to connect to it.
+You can specify an endpoint as an address endpoint, WSDL endpoint, a  load-balancing endpoint and more. An endpoint is defined independently of transports, allowing you to use the same endpoint with multiple transports. When you configure a message mediation sequence or a proxy service to handle the incoming message, you specify which transport to use and the endpoint where the message will be sent.
+An inbound  endpoint is a message source that can be configured dynamically. In the ESB profile, when it comes to the existing Axis2 based transports, only the HTTP transport works in a multi-tenant mode. Inbound endpoints support all transports to work in a multi-tenant mode.
+
+Proxy services are virtual services that receive messages and optionally process them before forwarding them to a service at a given endpoint. This approach allows you to perform necessary transformations and introduce additional functionality without changing your existing service. Any available transport can be used to receive and send messages from the proxy services. A proxy service is externally visible and can be accessed using a URL similar to a normal web service address.
+
+A REST API in the ESB profile is analogous to a web application deployed in the ESB profile. Each API is anchored at a user-defined URL context, much like how a web application deployed in a servlet container is anchored at a fixed URL context. An API will only process requests that fall under its URL context. A REST API defines one or more resources, which is a logical component of an API that can be accessed by making a particular type of HTTP call.
+
+A REST API resource is used by the ESB profile mediation engine to mediate incoming requests, forward them to a specified endpoint, mediate the responses from the endpoint, and send the responses back to the client that originally requested them. We can create an API resource to process defined HTTP request method/s that are sent to the backend service. The In sequence handles incoming requests and sends them to the back-end service, and the Out sequence handles the responses from the back-end service and sends them back to the requesting client.
+
+REST APIs allow you to send messages directly into the ESB profile using REST.
+
+A topic allows services to receive messages when a specific type of event occurs by subscribing to messages that have been published to a specific topic.
+
+Mediators are individual processing units that perform a specific function, such as sending, transforming, or filtering messages. The ESB profile includes a comprehensive mediator library that provides functionality for implementing widely used Enterprise Integration Patterns (EIPs). You can also easily write a custom mediator to provide additional functionality using various technologies such as Java, scripting, and Spring.
+
+A sequence is a set of mediators organized into a logical flow, allowing you to implement pipes and filter patterns. You can add sequences to proxy services and REST APIs.
+
+A task allows you to run a piece of code triggered by a timer. The ESB profile provides a default task implementation, which you can use to inject a message to the ESB profile at a scheduled interval. You can also write your own custom tasks by implementing a Java interface.
+
+The Quality of Service (QoS) component implements security.
+
+A registry is a content store and metadata repository. WSO2 Enterprise Integrator provides a registry with a built-in repository that stores the configuration and configuration metadata that define your messaging architecture. You can also use an external registry/repository for resources such as WSDLs, schemas, scripts, XSLT and XQuery transformations, etc. You can hide or merge one or more remote registries behind a local registry interface, and you can configure the Enterprise Integrator to poll these registries to update its current configurations.
+
+The Management Console provides a graphical user interface (GUI) that allows you to easily configure the components mentioned above.
+
+A connector is a collection of templates that define operations that can be called from the ESB profile and is used when connecting the Enterprise Integrator to external third party APIs. The ESB profile provides a variety of connectors via the WSO2 Connector Store.
+
+Monitoring and analytics are provided by the EI-Analytics profile and this can be started as a separate profile. This component provides an analytics dashboard with a host of statistical graphs, message flow diagrams and mediator properties. If required, the analytics can be extended with customizations. For more information, see WSO2 Enterprise Integrator Analytics.
+
+When there is an incoming message into the ESB profile, it is able to determine and route the message to the recipient. Routing can also be done based on some component of the message. This is known as content-based routing and is done using the Switch mediator.
+
+The ESB profile is able to filter out messages based on the message content using the Filter mediator. This feature allows you to perform complex logic, where you are able to filter out messages and send them in different mediation flows.
+
+When sender and receiver messages do not have the same data format, the ESB profile can be used to translate the messages between the sender and recipient. For information on how the ESB profile can be used for this, see the Message Translator pattern in the EIP Guide. The PayloadFactory mediator and Data Mapper mediator can be used to implement this. You can manipulate messages by adding and removing content from them, converting them to a completely different message format and even validating messages based on the available validation mechanisms of the message format.
+
+The ESB profile has the capability to take messages that come in one protocol and then send the message out in a completely different protocol (e.g. HTTP to JMS). The protocol bridging technology in the ESB profile takes the business content of a message that comes in from one protocol and sends this content out in a completely different format and protocol.
+
+Service chaining is a popular use case in the ESB profile, where several services are exposed as a single service, aggregated service. The ESB profile is used for the integration and sequential calling of these services so that the expected response can be provided to the client.
+
+Store and forward messaging pattern is used in asynchronous messaging. This can be used when integrating with systems that accept message traffic at a given rate and handling failover scenarios. In this pattern, messages are sent to a Message Store where they are temporarily stored before they are delivered to their destination by a Message Processor. The ESB profile is shipped with a few message store implementations and also allows you to implement a custom message store implementation.
+
+WSO2 Enterprise Integrator tooling creates separate projects and a separate Maven pom.xml file for most deployable artifacts. In Maven-centric development, however, you have a parent project and some child modules, including a separate distribution module that is a child module of the parent project. To achieve this model, you can create a Maven Multi Module project in your workspace, create your artifact projects nested within it, and then create the Composite Application project for the distribution module.
+
+To deploy the artifacts to the ESB profile, we must first package the artifact project/s into a Composite Application (C-App) project. A C-App also allows you to easily port your artifacts from one environment to another. For detailed information on C-Apps, see Introduction to Composite Applications in WSO2 Admin Guide.
+
+Data services hosted within the ESB profile can be easily used for an integration solution. You can expose any type of data source as a data service, which will simply decouple the data source from its infrastructure and expose the capabilities of the data source as a service.
+
+WSO2 Enterprise Integrator has the capability to run short running stateless business processes as well as long running stateful business processes. However, for long running stateful business processes, you need to use the EI-Business-Process profile that is shipped with the Enterprise Integrator. Business processes can be written using Web Services Business Process Execution Language (WS-BPEL) and Business Process Model and Notation (BPMN) standards. It also has the capability for human task integration.
+
+WSO2 MSF4J (Micro Services Framework for Java) is a separate profile that is shipped with WSO2 Enterprise Integrator. This allows developers to quickly get started with developing and running Java micro services. You simply need to annotate your service and deploy it using a single line of code.
