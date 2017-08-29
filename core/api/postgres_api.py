@@ -67,7 +67,6 @@ class PostgresAPI:
         # Return (sentence_id, sentence) Tuple
         sentence_id = self.cursor.fetchall()[0][0]
         self.conn.commit()
-        print('.')
         return sentence_id, sentence
 
     def insert_frames(self, sentence_id: str, frames: list):

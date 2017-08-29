@@ -5,6 +5,8 @@ from nltk.util import breadth_first
 
 from core.api import StanfordAPI
 
+stanfordAPI = StanfordAPI()
+
 
 def process_sentence(tree):
     entities = []
@@ -40,8 +42,7 @@ def get_wordnet_pos(treebank_tag: str):
 
 
 def pos_tag(sentence: str):
-    pos_tagged_string = StanfordAPI().pos_tag(sentence)
-    return [tuple(x.split('_')) for x in str(pos_tagged_string, 'ascii').strip().split()]
+    return stanfordAPI.pos_tag(sentence)
 
 
 def sanitize(word: str):
