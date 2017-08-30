@@ -67,15 +67,16 @@ class PostgresAPI:
         # Return (sentence_id, sentence) Tuple
         sentence_id = self.cursor.fetchall()[0][0]
         self.conn.commit()
+        print('.', end='', flush=True)
         return sentence_id, sentence
 
-    def insert_frames(self, sentence_id: str, frames: list):
+    def insert_frames(self, sentence_id: str, frames: set):
         for frame in frames:
             self.cursor.execute('''
                 INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
         self.conn.commit()
 
-    def query_sentences(self, entities: list, frames: list):
+    def query_sentences(self, entities: list, frames: set):
         frame_param = str(frames).replace('[', '').replace(']', '')
         self.cursor.execute('''
             SELECT DISTINCT sentence_id from semantic_kb.frames WHERE frame IN ({0}) 

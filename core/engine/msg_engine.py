@@ -32,7 +32,7 @@ class MessageEngine:
             is_question = parsed_sentence[2]
 
             nouns = self.extract_entities(pos_tagged_tokens)
-            frames = self.text_parser.get_frames(sentence_text)
+            frames = set(self.text_parser.get_frames(sentence_text))
 
             # TODO - Causes error if not checked. Look for alternative way
             if len(frames) == 0:

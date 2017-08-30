@@ -7,57 +7,55 @@ from core.nlptools import common
 
 class TextParser:
     @staticmethod
-    def get_frames(input_phrase: str, verbose=False):
-
+    def __get_frames(input_phrase: str, verbose=False):
         sanitized_phrase = common.sanitize(input_phrase)
-        pos_tagged_tokens = common.pos_tag(sanitized_phrase)
-        # print(pos_tagged_tokens)
+        pos_tagged_tokens = common.pos_tag(sanitized_phrase, wordnet_pos=True)
         lem = WordNetLemmatizer()
-        results = set()
+
         for token in pos_tagged_tokens:
 
             # Ignore placeholder token for entities
-            if token[0] == 'ENT' or len(token[0]) < 2:
-                continue
-
-            # Get Wordnet POS tag
-            pos = common.get_wordnet_pos(token[1])
-            if pos == '':
+            if token[0] == 'ENTITY' or len(token[0]) < 2:
                 continue
 
             # Lemmatize token
-            lemma = lem.lemmatize(token[0], pos)
+            if token[1] == '':
+                lemma = token[0].lower()
+            else:
+                lemma = lem.lemmatize(token[0].lower(), token[1])
+
             # TODO convert adverbs to a root form adjective. Otherwise they are missed
-            # if pos == wordnet.ADV:
-            #     if str(lemma).endswith('ly'):
-            #         lemma = lemma[:-2]
-            #         if lemma[-1] == 'i':
-            #             lemma = lemma[:-1] + 'y'
-            #         pos = wordnet.ADJ
-            #         input(lemma)
+            # TODO maybe this is not necessary. Will check on accuracy and implement if needed
+
+            # If lemma is a stopword, use the original token instead
             if lemma in stopwords.words('english'):
-                lemma = token[0]
+                lemma = token[0].lower()
 
             # Get LUs matching lemma
             if verbose:
                 print('{0!s:-<25}'.format(token))
-            lex_units = fn.lus(r'(?i)(\A|(?<=\s))(%s)(\s.*)?\.(%s)' % (lemma, pos))
+
+            lex_units = fn.lus(r'(?i)(\A|(?<=\s))(%s)(\s.*)?\.(%s).*' % (lemma, token[1]))
+
+            # For lemmas that do not return lexical unit matches
             if len(lex_units) == 0:
-                results = results.union([lemma])
+                if token[1] in ['v', 'a'] and lemma not in ['is', 'are']:
+                    yield lemma
                 continue
 
             # Log the results
             if verbose:
                 print('{0!s:-<30} |{1}'.format(token, "".join(
-                    '{:-<60}|'.format(x) for x in set(['%s-==>-%s' % (lu.name, lu.frame.name) for lu in lex_units]))))
+                    '{:-<60}|'.format(x) for x in set(('%s-==>-%s' % (lu.name, lu.frame.name) for lu in lex_units)))))
 
             # Get frame names from matched LUs and add to results
-            frames = set([lexUnit.frame.name for lexUnit in lex_units])
-            results = results.union(frames)
+            for lexUnit in lex_units:
+                yield lexUnit.frame.name
+        print('.', end='', flush=True)
 
-        if not verbose:
-            print('.')
-        return list(results)
+    @staticmethod
+    def get_frames(input_phrase: str, verbose=False) -> set:
+        return set(TextParser.__get_frames(input_phrase, verbose))
 
     @staticmethod
     def parametrize_text(input_text: str) -> tuple:
@@ -69,7 +67,7 @@ class TextParser:
         input_sentences = common.sent_tokenize(input_text)
         for sentence in input_sentences:
             input_tokens = common.word_tokenize(sentence)
-            pos_tagged_tokens = common.pos_tag(' '.join(input_tokens))
+            pos_tagged_tokens = tuple(common.pos_tag(' '.join(input_tokens)))
 
             # Extract phrases according to english grammar
             grammar = '''
@@ -95,4 +93,4 @@ class TextParser:
             parse_tree = cp.parse(pos_tagged_tokens)
 
             # Extract Relevant entities from a parse tree and generate a parametrized sentence
-            yield next(common.process_sentence(parse_tree))
+            yield common.process_sentence(parse_tree)

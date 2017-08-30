@@ -13,4 +13,5 @@ class StanfordAPI:
             s.connect((self.host, self.port))
             s.send(message.strip().encode('ascii') + b'\n')
             data = s.recv(self.buffer)
-        return [tuple(x.rsplit('_', 1)) for x in str(data, 'ascii').strip().split()]
+        for x in str(data, 'ascii').strip().split():
+            yield tuple(x.rsplit('_', 1))

@@ -13,12 +13,13 @@ class StanfordServer:
 
     def __enter__(self):
         # Start Stanford Server
+        print('Starting Stanford Server on Port %d' % self.port)
         self.subprocess = subprocess.Popen(
             ['java', '-mx300m', '-cp', self.jar_path, self.classpath, '-model', self.model_path, '-port',
              str(self.port)])
         # Wait while Server is Started.
         time.sleep(3)
-        print('Stanford Server Started on Port %d' % self.port)
+        print('Stanford Server Started Successfully')
 
     def __exit__(self, type, value, traceback):
         # Terminate Server Process

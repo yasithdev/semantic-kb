@@ -25,7 +25,7 @@ def process_sentence(tree):
             elif x.label() in ['VP', 'NP']:
                 sentence = ' '.join([sentence] + [' '.join([p[0] for p in x.leaves()])])
 
-    yield sentence.strip().replace(" ' ", ""), entities
+    return sentence.strip().replace(" ' ", ""), entities
 
 
 def get_wordnet_pos(treebank_tag: str):
@@ -41,23 +41,19 @@ def get_wordnet_pos(treebank_tag: str):
         return ''
 
 
-def pos_tag(sentence: str):
-    return stanfordAPI.pos_tag(sentence)
+def pos_tag(sentence: str, wordnet_pos = False):
+    for token in stanfordAPI.pos_tag(sentence):
+        if wordnet_pos:
+            yield (token[0], get_wordnet_pos(token[1]))
+        else:
+            yield tuple(token)
 
 
-def sanitize(word: str):
-    result = []
-    is_last_num_numeric = False
-    for c in word:
-        if c.isalpha():
-            result += [c]
-            is_last_num_numeric = False
-        elif c.isnumeric() and not is_last_num_numeric:
-            is_last_num_numeric = True
-            result += 'ENT'
-        elif len(result) > 0 and result[-1] != ' ':
-            result += [' ']
-    return ''.join(result).replace('LRB', '(').replace('RRB', ')')
+def sanitize(sentence: str):
+    # remove entity tags
+    entity_sanitized_sent =  re.sub(r'\[\@\d+?\]', 'ENTITY', sentence)
+    # remove bracket tags and return
+    return re.sub(r'-[LR][CSR]B-', '', entity_sanitized_sent)
 
 
 def sent_tokenize(input: str):
@@ -66,4 +62,6 @@ def sent_tokenize(input: str):
 
 def word_tokenize(input: str):
     regex = r'[.:;,?]*\s+|[.:;,?]+\s*(?=$)'
-    return list(filter(lambda x: x != '', re.split(regex, input)))
+    for x in re.split(regex, input):
+        if x != '':
+            yield x

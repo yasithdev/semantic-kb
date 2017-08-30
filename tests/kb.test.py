@@ -20,6 +20,7 @@ text_parser = TextParser()
 # Truncate all tables
 db_api.truncate_tables()
 
+# Initialize Stanford Server
 with StanfordServer():
     # Extract data from phrase and insert into KB
     print('INSERTING DATA')
@@ -28,13 +29,13 @@ with StanfordServer():
         db_api.insert_sentence(parametrized_sentence)
         for entity in parametrized_sentence[1]:
             all_entities.add(entity)
-    print('DONE! Total Entities - %d' % len(list(all_entities)))
+    print('DONE! Total Entities - %d' % len(tuple(all_entities)))
 
     print('CALCULATING FRAMES FOR RELATIONS')
     all_frames = set()
     for sentence in db_api.get_all_sentences():
-        sent_frames = text_parser.get_frames(sentence[1])
+        sent_frames = set(text_parser.get_frames(sentence[1]))
         db_api.insert_frames(sentence[0], sent_frames)
         for frame in sent_frames:
             all_frames.add(frame)
-    print('DONE! Total Frames - %d' % len(list(all_frames)))
+    print('DONE! Total Frames - %d' % len(tuple(all_frames)))

@@ -12,7 +12,6 @@ class MessageParser:
         input_sentences = common.sent_tokenize(input_text)
         for sentence in input_sentences:
             pos_tagged_tokens = common.pos_tag(sentence)
-            print(pos_tagged_tokens)
             pass
             # Check if the tokens in a sentence belong to a question or a statement
             for token in pos_tagged_tokens:
