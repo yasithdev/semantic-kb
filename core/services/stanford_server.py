@@ -1,5 +1,4 @@
 import subprocess
-import time
 
 
 class StanfordServer:
@@ -13,13 +12,25 @@ class StanfordServer:
 
     def __enter__(self):
         # Start Stanford Server
-        print('Starting Stanford Server on Port %d' % self.port)
+        print('Starting Stanford Server on Port %d ...' % self.port, end='', flush=True)
         self.subprocess = subprocess.Popen(
             ['java', '-mx300m', '-cp', self.jar_path, self.classpath, '-model', self.model_path, '-port',
-             str(self.port)])
-        # Wait while Server is Started.
-        time.sleep(3)
-        print('Stanford Server Started Successfully')
+             str(self.port)], stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+        status = True
+        # Wait while Server is Started, or terminate if error occurred
+        try:
+            out = self.subprocess.communicate(timeout=4)[0].decode('ascii')
+            status = False
+            print('... ERROR!')
+            print(out)
+        except subprocess.TimeoutExpired:
+            # wait until some console output is given
+            pass
+        if status:
+            print('... DONE!')
+        else:
+            self.subprocess.terminate()
+            exit(0)
 
     def __exit__(self, type, value, traceback):
         # Terminate Server Process

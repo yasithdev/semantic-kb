@@ -1,3 +1,5 @@
+from difflib import SequenceMatcher
+
 from nltk import RegexpParser
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
@@ -5,13 +7,21 @@ from nltk.stem import WordNetLemmatizer
 from core.nlptools import common
 
 
+# from collections import Counter
+
+
 class TextParser:
     @staticmethod
-    def __get_frames(input_phrase: str, verbose=False):
+    def calculate_similarity(a, b):
+        return SequenceMatcher(None, a, b).ratio()
+
+    @staticmethod
+    def get_frames(input_phrase: str, verbose=False) -> set:
         sanitized_phrase = common.sanitize(input_phrase)
+        print(sanitized_phrase)
         pos_tagged_tokens = common.pos_tag(sanitized_phrase, wordnet_pos=True)
         lem = WordNetLemmatizer()
-
+        results = {}
         for token in pos_tagged_tokens:
 
             # Ignore placeholder token for entities
@@ -27,9 +37,13 @@ class TextParser:
             # TODO convert adverbs to a root form adjective. Otherwise they are missed
             # TODO maybe this is not necessary. Will check on accuracy and implement if needed
 
-            # If lemma is a stopword, use the original token instead
+            # If lemma is a stop-word, use the original token instead
             if lemma in stopwords.words('english'):
                 lemma = token[0].lower()
+            # If the token is also a stop-word, ignore it
+            if lemma in stopwords.words('english'):
+                print('IGNORED -> %s' % lemma)
+                continue
 
             # Get LUs matching lemma
             if verbose:
@@ -40,7 +54,7 @@ class TextParser:
             # For lemmas that do not return lexical unit matches
             if len(lex_units) == 0:
                 if token[1] in ['v', 'a'] and lemma not in ['is', 'are']:
-                    yield lemma
+                    results[lemma] = dict(results).get(lemma,0) + 1
                 continue
 
             # Log the results
@@ -50,12 +64,14 @@ class TextParser:
 
             # Get frame names from matched LUs and add to results
             for lexUnit in lex_units:
-                yield lexUnit.frame.name
-        print('.', end='', flush=True)
+                n = lexUnit.frame.name
+                results[n] = dict(results).get(n,0) + 1
 
-    @staticmethod
-    def get_frames(input_phrase: str, verbose=False) -> set:
-        return set(TextParser.__get_frames(input_phrase, verbose))
+        # print('.', end='', flush=True)
+        # result = dict(Counter(results).most_common()).keys()
+        result = results.keys()
+        print(result, end='\n..........\n')
+        return set(result)
 
     @staticmethod
     def parametrize_text(input_text: str) -> tuple:
@@ -92,5 +108,5 @@ class TextParser:
             cp = RegexpParser(grammar)
             parse_tree = cp.parse(pos_tagged_tokens)
 
-            # Extract Relevant entities from a parse tree and generate a parametrized sentence
+            # Tag the elevant entities from a parse tree and generate a parametrized sentence
             yield common.process_sentence(parse_tree)

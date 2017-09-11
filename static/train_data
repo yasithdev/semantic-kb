@@ -1,3 +1,5 @@
+When a message comes into the ESB profile, the receiving transport selects a message builder based on the message's content type.
+
 The ESB profile includes message builders for text-based and binary content. WSO2 EI consists of two conceptual components.The ESB profile handles short-running integration flows while the business process profile handles long-running stateful business processes. Following are definitions of some of the concepts and terminology associated with the ESB and business process profiles.
 
 The ESB profile shipped with WSO2 EI comprises of the following high level components:

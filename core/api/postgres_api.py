@@ -49,8 +49,9 @@ class PostgresAPI:
 
     def insert_sentence(self, parametrized_sentence: tuple):
         sentence = parametrized_sentence[0]
-        for i in range(len(parametrized_sentence[1])):
-            entity = parametrized_sentence[1][i]
+        params = parametrized_sentence[1]
+        for i in range(len(params)):
+            entity = params[i]
             # Insert each entity
             self.cursor.execute('''
                 INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
@@ -58,7 +59,7 @@ class PostgresAPI:
                 RETURNING id''', [entity])
             # Update sentence with referential parameters to entity_id
             entity_id = self.cursor.fetchall()[0][0]
-            sentence = sentence.replace('[#%d]' % i, '[@%d]' % entity_id)
+            sentence = sentence.replace('(E:%s|@:%d)' % (params[i], i), '(E:%s|@:%d)' % (params[i], entity_id))
 
         # Insert templated sentence
         self.cursor.execute('''
@@ -117,4 +118,12 @@ class PostgresAPI:
 
     def get_all_sentences(self):
         self.cursor.execute('SELECT id, sentence FROM semantic_kb.sentences')
+        return self.cursor.fetchall()
+
+    def get_all_entities(self):
+        self.cursor.execute('SELECT id, entity FROM semantic_kb.entities ORDER BY entity')
+        return self.cursor.fetchall()
+
+    def get_all_frames(self):
+        self.cursor.execute('SELECT frame, sentence_ids FROM semantic_kb.frame_view')
         return self.cursor.fetchall()
