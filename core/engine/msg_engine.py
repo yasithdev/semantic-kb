@@ -14,24 +14,24 @@ class MessageEngine:
         n.extend([x[0] for x in pos_tagged_tokens if str(x[1]).startswith(n_tuple)])
         return " ".join(n).strip()
 
-    def process(self, input: str) -> str:
+    def process_message(self, input: str) -> str:
         """
-
-        :param input:
-        :return:
-        :rtype: object
+    Extract the semantic meaning of a question, and produce a valid list of outputs with a relevance score
+        :param input: input question
+        :return: output answers
+        :rtype: str
         """
         default_fallback = 'Sorry. I do not know the answer for that.'
 
         # get a list of tuples in the form (sentence_text, pos_tagged_tokens, is_question)
-        parsed_sentences = list(self.message_parser.parse(input))
+        parsed_sentences = list(self.message_parser.calculate_q_score(input))
 
         for parsed_sentence in parsed_sentences:
             sentence_text = parsed_sentence[0]
             pos_tagged_tokens = parsed_sentence[1]
             is_question = parsed_sentence[2]
 
-            nouns = self.extract_entities(pos_tagged_tokens)
+            nouns = self.text_parser
             frames = set(self.text_parser.get_frames(sentence_text))
 
             # TODO - Causes error if not checked. Look for alternative way

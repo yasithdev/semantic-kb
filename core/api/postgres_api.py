@@ -48,28 +48,33 @@ class PostgresAPI:
         self.conn.commit()
 
     def insert_sentence(self, parametrized_sentence: tuple):
-        sentence = parametrized_sentence[0]
-        params = parametrized_sentence[1]
-        for i in range(len(params)):
-            entity = params[i]
-            # Insert each entity
+        # assign variables to sentence, entity_dict, and entities
+        sentence = str(parametrized_sentence[0])
+        entity_dict = dict(parametrized_sentence[1])
+        entities = entity_dict.keys()
+
+        # insert each entity and update entity_dict with correct entity ids
+        for entity in entities:
+            # Insert entity
             self.cursor.execute('''
                 INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
                 RETURNING id''', [entity])
-            # Update sentence with referential parameters to entity_id
-            entity_id = self.cursor.fetchall()[0][0]
-            sentence = sentence.replace('(E:%s|@:%d)' % (params[i], i), '(E:%s|@:%d)' % (params[i], entity_id))
+            # Update entity_dict with correct entity id
+            entity_dict[entity] = self.cursor.fetchall()[0][0]
+            # Update sentence with the new entity id
+            sentence = sentence.replace('(E:%s|@:0)' % entity, '(E:%s|@:%d)' % (entity, entity_dict[entity]))
 
-        # Insert templated sentence
+        # Insert parametrized sentence
         self.cursor.execute('''
             INSERT INTO semantic_kb.sentences (sentence) VALUES (%s) ON CONFLICT (sentence) DO UPDATE 
             SET sentence = EXCLUDED.sentence RETURNING id''', [sentence])
-        # Return (sentence_id, sentence) Tuple
+
+        # return the sentence_id
         sentence_id = self.cursor.fetchall()[0][0]
         self.conn.commit()
         print('.', end='', flush=True)
-        return sentence_id, sentence
+        return sentence_id
 
     def insert_frames(self, sentence_id: str, frames: set):
         for frame in frames:
@@ -86,35 +91,34 @@ class PostgresAPI:
 
         # TODO - Fix Method so that sentences having correct entities are returned in ascending order of sentence_id
         return ''
-
-        for sentence_id in sentence_ids:
-            self.cursor.execute('''
-                WITH RECURSIVE
-                tree_up(parent, child, depth) AS (
-                  SELECT j.parent_id, j.child_id, -1 from semantic_kb.joins j WHERE j.child_id = {0}
-                  UNION
-                  SELECT j.parent_id, j.child_id, depth - 1 FROM tree_up tu 
-                  INNER JOIN semantic_kb.joins j on j.child_id = parent
-                ),
-                tree_down(parent, child, depth) AS (
-                  SELECT j.parent_id, j.child_id, 1 from semantic_kb.joins j WHERE j.parent_id = {0}
-                  UNION
-                  SELECT j.parent_id, j.child_id, depth + 1 FROM tree_down td 
-                  INNER JOIN semantic_kb.joins j on j.parent_id = child
-                )
-                SELECT DISTINCT ids.id, e1.entity, r.relation, e2.entity, ids.depth FROM (
-                SELECT parent AS id, depth FROM tree_up UNION VALUES({0}, 0) UNION SELECT child AS id, depth FROM tree_down) AS ids
-                INNER JOIN semantic_kb.triples t ON ids.id = t.id
-                INNER JOIN semantic_kb.entities e1 ON e1.id = t.entity_1
-                INNER JOIN semantic_kb.entities e2 ON e2.id = t.entity_2
-                INNER JOIN semantic_kb.relations r ON r.id = t.relation
-                ORDER BY ids.depth ASC
-            '''.format(id)
-                                )
-            sentence_ids = self.cursor.fetchall()
-            sentence = (' '.join([' '.join(x[1:-2]) for x in sentence_ids] + [sentence_ids[-1][-2]]) + '.').replace(
-                '# ', '').replace(' #', '').strip()
-            yield sentence
+        # for sentence_id in sentence_ids:
+        #     self.cursor.execute('''
+        #         WITH RECURSIVE
+        #         tree_up(parent, child, depth) AS (
+        #           SELECT j.parent_id, j.child_id, -1 from semantic_kb.joins j WHERE j.child_id = {0}
+        #           UNION
+        #           SELECT j.parent_id, j.child_id, depth - 1 FROM tree_up tu
+        #           INNER JOIN semantic_kb.joins j on j.child_id = parent
+        #         ),
+        #         tree_down(parent, child, depth) AS (
+        #           SELECT j.parent_id, j.child_id, 1 from semantic_kb.joins j WHERE j.parent_id = {0}
+        #           UNION
+        #           SELECT j.parent_id, j.child_id, depth + 1 FROM tree_down td
+        #           INNER JOIN semantic_kb.joins j on j.parent_id = child
+        #         )
+        #         SELECT DISTINCT ids.id, e1.entity, r.relation, e2.entity, ids.depth FROM (
+        #         SELECT parent AS id, depth FROM tree_up UNION VALUES({0}, 0) UNION SELECT child AS id, depth FROM tree_down) AS ids
+        #         INNER JOIN semantic_kb.triples t ON ids.id = t.id
+        #         INNER JOIN semantic_kb.entities e1 ON e1.id = t.entity_1
+        #         INNER JOIN semantic_kb.entities e2 ON e2.id = t.entity_2
+        #         INNER JOIN semantic_kb.relations r ON r.id = t.relation
+        #         ORDER BY ids.depth ASC
+        #     '''.format(id)
+        #                         )
+        #     sentence_ids = self.cursor.fetchall()
+        #     sentence = (' '.join([' '.join(x[1:-2]) for x in sentence_ids] + [sentence_ids[-1][-2]]) + '.').replace(
+        #         '# ', '').replace(' #', '').strip()
+        #     yield sentence
 
     def get_all_sentences(self):
         self.cursor.execute('SELECT id, sentence FROM semantic_kb.sentences')
