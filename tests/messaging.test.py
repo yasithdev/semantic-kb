@@ -2,7 +2,6 @@
 # GENERIC REQUIREMENT IS FOR NO EXCEPTIONS TO OCCUR AND TO GET RELEVANT ANSWERS
 from core.api import PostgresAPI
 from core.engine import MessageEngine
-from core.nlptools import common
 from core.services import StanfordServer
 
 # Message engine object
@@ -17,5 +16,5 @@ with StanfordServer():
             break
         elif message == '':
             continue
-        print(common.pos_tag(message))
-        print('A > %s' % msgEngine.process_message(message))
+        answer = '. '.join(msgEngine.process_message(message))
+        print('A > %s' % answer + '.')

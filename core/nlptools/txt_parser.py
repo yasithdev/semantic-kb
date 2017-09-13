@@ -1,6 +1,6 @@
 from difflib import SequenceMatcher
 
-from nltk import RegexpParser
+from nltk import (RegexpParser)
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
 
@@ -9,13 +9,13 @@ from core.nlptools import common
 
 class TextParser:
     @staticmethod
-    def calculate_similarity(a, b):
+    def calculate_similarity(a, b) -> float:
         return SequenceMatcher(None, a, b).ratio()
 
     @staticmethod
-    def get_frames(input_phrase: str, verbose=False) -> set:
-        sanitized_phrase = common.sanitize(input_phrase)
-        print(sanitized_phrase)
+    def get_frames(input_phrase: str, verbose=False, search_entities: bool=False) -> set:
+        sanitized_phrase = common.sanitize(input_phrase, preserve_entities=search_entities)
+        print('# frame query-> %s' % sanitized_phrase)
         pos_tagged_tokens = common.pos_tag(sanitized_phrase, wordnet_pos=True, ignored_words=['ENTITY'])
         lem = WordNetLemmatizer()
         results = {}
@@ -61,7 +61,7 @@ class TextParser:
         return set(result)
 
     @staticmethod
-    def parametrize_text(input_text: str) -> tuple:
+    def parametrize_sentence(input_text: str) -> next:
         """
     Break given text into sentences, extract phrases from it, and return a 2D list with lists for each sentence
         :param input_text: text in descriptive format

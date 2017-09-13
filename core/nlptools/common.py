@@ -89,7 +89,7 @@ Transform **Penn-Treebank** POS tags to **Wordnet** POS Tags
         return ''
 
 
-def pos_tag(sentence: str, wordnet_pos=False, ignored_words: list = list()) -> list:
+def pos_tag(sentence: str, wordnet_pos=False, ignored_words: list = list()) -> next:
     """
 POS-tag a sentence using Stanford pos-tagger, ignore any words mentioned in ignored_words,
 and return a list of pos_tagged tokens

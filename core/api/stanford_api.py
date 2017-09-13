@@ -8,7 +8,7 @@ class StanfordAPI:
         self.port = port
         self.buffer = buffer
 
-    def pos_tag(self, message: str):
+    def pos_tag(self, message: str) -> next:
         with socket() as s:
             s.connect((self.host, self.port))
             s.send(message.strip().encode('ascii') + b'\n')

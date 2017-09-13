@@ -25,9 +25,11 @@ with StanfordServer():
     # Extract data from phrase and insert into KB
     print('INSERTING DATA')
     all_entities = set()
-    for parametrized_sentence in text_parser.parametrize_text(sample_content):
-        db_api.insert_sentence(parametrized_sentence)
-        for entity in parametrized_sentence[1]:
+    for parametrized_sentence in text_parser.parametrize_sentence(sample_content):
+        sentence = str(parametrized_sentence[0])
+        entity_dict = dict(parametrized_sentence[1])
+        db_api.insert_sentence(sentence, entity_dict)
+        for entity in entity_dict.keys():
             all_entities.add(entity)
     print('DONE! Total Entities - %d' % len(tuple(all_entities)))
 
