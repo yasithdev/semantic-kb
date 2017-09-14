@@ -78,7 +78,7 @@ class TextParser:
                 ADJ: {(<RB>?<JJ><CC>?<RB>?<JJ>?)+}
                 
                 # Entity Chunks
-                ENT: {<ADJ>*<NN.*>+|<ADJ>*<FW>+|<ADJ|NN><VBG>+<NN.*>?}
+                ENT: {(<ADJ>*<NN.*|FW>+<IN>)?<ADJ>*<NN.*>+|<ADJ>*<FW>+|<ADJ|NN><VBG>+<NN.*>?}
                 
                 # Preposition Chunks
                 PP:  {(<DT>|<CD>(<CC>?<CD|JJR>)?)<VB.*>?}

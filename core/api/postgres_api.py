@@ -35,6 +35,9 @@ class PostgresAPI:
         cursor.execute('''
             CREATE VIEW semantic_kb.frame_view AS 
             SELECT frame, array_agg(sentence_id) sentence_ids FROM semantic_kb.frames GROUP BY frame ORDER BY frame ASC''')
+        # Add Fuzzy String match extensions for semantic_kb
+        cursor.execute('''CREATE EXTENSION fuzzystrmatch WITH SCHEMA semantic_kb''')
+        # Commit the DDL
         self.conn.commit()
 
     def drop_schema(self) -> None:
@@ -55,7 +58,7 @@ class PostgresAPI:
         for entity in entities:
             # Insert entity
             self.cursor.execute('''
-                INSERT INTO semantic_kb.entities (entity) VALUES (%S) 
+                INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
                 RETURNING id''', [entity])
             # Update entity_dict with correct entity id
@@ -65,7 +68,7 @@ class PostgresAPI:
 
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence) VALUES (%S) ON CONFLICT (sentence) DO UPDATE 
+            INSERT INTO semantic_kb.sentences (sentence) VALUES (%s) ON CONFLICT (sentence) DO UPDATE 
             SET sentence = EXCLUDED.sentence RETURNING id''', [sentence])
 
         # return the sentence_id
@@ -77,20 +80,21 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%S, %S)''', [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
         self.conn.commit()
 
-    def query_sentences(self, entities: set, frames: set) -> list:
+    def query_sentence_ids(self, entities: set, frames: set) -> set:
         # Get the entity ids of the entities matching the input entities
         def get_matching_entity_ids(input_entities: set) -> set:
             for entity in input_entities:
                 self.cursor.execute('''
                             SELECT DISTINCT id from semantic_kb.entities WHERE entity LIKE '%%{0}%%'
-                            OR semantic_kb.levenshtein(entity, '{0}') <= 2'''.format(entity))
+                            OR semantic_kb.levenshtein(entity, '{0}') <= 3'''.format(entity))
                 return set([int(result[0]) for result in self.cursor.fetchall()])
 
         # Get the sentence ids of the sentences containing the passed entity ids
         def get_entity_matching_sent_ids(input_entity_ids: set) -> next:
+            # TODO Instead of full-text searching, create a table where for each sentence, each entity is ranked in the order of significance
             for id in input_entity_ids:
                 self.cursor.execute('''SELECT DISTINCT id, sentence from semantic_kb.sentences 
                                     WHERE sentence LIKE '%%@:{0})%%';'''.format(id))
@@ -123,24 +127,25 @@ class PostgresAPI:
 
         # TODO Check if the logic can be made better
         sent_ids_intersection = entity_matching_sent_ids.intersection(frame_matching_sent_ids)
-        sent_ids_union = entity_matching_sent_ids.union(frame_matching_sent_ids)
 
         # Using the matching sentence ids, return the sentences in order of their Ids
         if len(sent_ids_intersection) != 0:
-            matched_sent_ids = sent_ids_intersection
+            # Option 1 - Intersection Exists. Gives most relevant results
+            return sent_ids_intersection
+        elif len(entity_matching_sent_ids) != 0:
+            # Option 2 - No intersection. Gives results relevant to entity
+            return entity_matching_sent_ids
         else:
-            matched_sent_ids = sent_ids_union
+            # Option 3 - No entity matching sentences. Return no results
+            return set([])
 
-        if len(matched_sent_ids) == 0:
-            # if no results found, return empty list
-            return []
-        else:
-            sent_id_param = str(matched_sent_ids).replace('{', '').replace('}', '')
-            self.cursor.execute('''
-                        SELECT DISTINCT id, sentence from semantic_kb.sentences WHERE id IN ({0}) 
-                        ORDER BY id ASC'''.format(sent_id_param))
+    def get_sentences_by_id(self, sentence_ids: list) -> next:
+        for id in sentence_ids:
+            self.cursor.execute('''SELECT DISTINCT id, sentence from semantic_kb.sentences WHERE id=%s''', [id])
             # get the sentence text and return the output as a list
-            return [result[1] for result in self.cursor.fetchall()]
+            result = self.cursor.fetchone()
+            if result is not None:
+                yield result[1]
 
     def get_all_sentences(self) -> tuple:
         self.cursor.execute('SELECT id, sentence FROM semantic_kb.sentences')

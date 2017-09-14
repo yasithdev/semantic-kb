@@ -14,6 +14,25 @@ class MessageEngine:
         n.extend([x[0] for x in pos_tagged_tokens if str(x[1]).startswith(n_tuple)])
         return " ".join(n).strip()
 
+    @staticmethod
+    def __merge_nearby_sentence_ids(sent_ids: set) -> next:
+        # sort the matching ids
+        sent_ids = list(sent_ids)
+        sent_ids.sort()
+        # define a threshold
+        __threshold__ = 3
+        # logic
+        if len(sent_ids) > 1:
+            for i in range(len(sent_ids)):
+                yield sent_ids[i]
+                if i+1 < len(sent_ids):
+                    if sent_ids[i+1] - sent_ids[i] < __threshold__:
+                        for x in range(sent_ids[i] + 1, sent_ids[i+1]):
+                            yield x
+        elif len(sent_ids) == 1:
+            for x in range(sent_ids[0], sent_ids[0] + __threshold__):
+                yield x
+
     def process_message(self, input_msg: str) -> next:
         """
     Extract the semantic meaning of a question, and produce a valid list of outputs with a relevance score
@@ -31,11 +50,15 @@ class MessageEngine:
             frames = self.txt_parser.get_frames(parametrized_sentence)
             # query matching sentences from database
             entities = set(entity_dict.keys())
-            answers_with_params = self.api.query_sentences(entities, frames)
+            matching_sentence_ids = self.api.query_sentence_ids(entities, frames)
+            sentence_ids = list(self.__merge_nearby_sentence_ids(matching_sentence_ids))
+            answers_with_params = self.api.get_sentences_by_id(sentence_ids)
             # check whether any answers returned
-            if len(answers_with_params) > 0:
-                for answer in answers_with_params:
-                    yield common.sanitize(answer, preserve_entities=True)
+            any_answers = False
+            for answer_with_param in answers_with_params:
+                if not any_answers:
+                    any_answers = True
+                yield common.sanitize(answer_with_param, preserve_entities=True)
             # if no answers returned at this point, return the default feedback
-            else:
+            if not any_answers:
                 yield default_fallback
