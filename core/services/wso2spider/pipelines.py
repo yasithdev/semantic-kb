@@ -15,34 +15,47 @@ class DuplicatesPipeline(object):
         self.ids_seen = set()
 
     def process_item(self, item, spider):
-        if item['title'] in self.ids_seen:
+        if item['_id'] in self.ids_seen:
             raise DropItem("Duplicate item found: %s" % item)
         else:
-            self.ids_seen.add(item['title'])
+            self.ids_seen.add(item['_id'])
             return item
 
 
 class Wso2SpiderPipeline(object):
-    def process_item(self, item, spider):
 
+    def process_item(self, item, spider):
         # clean unwanted spaces and incompatible characters from given text
         def sanitize(text: str) -> str:
             return re.sub(r'\s{2,}', ' ', regex.sub('', text.strip())).strip()
 
         regex = re.compile(r'\\x[0-9a-fA-F]{2}')
 
-        # previous title and content
+        # previous id, title and content
+        id = item['_id']
         title = item['title']
         content = item['content']
 
         # updated variables for title and content
         filtered_title = sanitize(title)
-        filtered_content = ' '.join([x for x in [sanitize(c) for c in content] if x != ''])
+        filtered_content = []
+
+        for item in content:
+            filtered_item = {
+                'heading': sanitize(item['heading']),
+                'text': ' '.join([x for x in [sanitize(y) for y in item['text']] if x != ''])
+            }
+            # only add filtered_item to filtered_content if any content is there
+            if len(filtered_item['heading']) > 0 or len(filtered_item['text']) > 0:
+                filtered_content += [filtered_item]
 
         # return only if item is validated as a doc content
         if len(filtered_title) > 0 and len(filtered_content) > 0:
-            return {'title': filtered_title,
-                    'content': filtered_content}
+            return {
+                '_id': id,
+                'title': filtered_title,
+                'content': filtered_content
+            }
         else:
             raise DropItem("Missing title or content")
 
