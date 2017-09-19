@@ -61,7 +61,7 @@ class TextParser:
         return set(result)
 
     @staticmethod
-    def parametrize_sentence(input_text: str) -> next:
+    def parametrize_text(input_text: str) -> next:
         """
     Break given text into sentences, extract phrases from it, and return a 2D list with lists for each sentence
         :param input_text: text in descriptive format
@@ -93,7 +93,11 @@ class TextParser:
             # TODO - Acronyms should be separately tagged with the Entity whenever they are found within brackets
 
             cp = RegexpParser(grammar)
-            parse_tree = cp.parse(pos_tagged_tokens)
+            try:
+                parse_tree = cp.parse(pos_tagged_tokens)
+            except Exception:
+                print(Exception)
+                input(pos_tagged_tokens)
 
             # Tag the relevant entities from a parse tree and generate a parametrized sentence
             parametrized_sentence = common.generate_parametrized_sent(parse_tree)

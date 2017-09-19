@@ -11,7 +11,13 @@ class StanfordAPI:
     def pos_tag(self, message: str) -> next:
         with socket() as s:
             s.connect((self.host, self.port))
-            s.send(message.strip().encode('ascii') + b'\n')
-            data = s.recv(self.buffer)
-        for x in str(data, 'ascii').strip().split():
+            s.send(message.strip().encode('ascii', 'ignore') + b'\r' + b'\n')
+            result = b''
+            while True:
+                data = s.recv(self.buffer)
+                if data == b'':
+                    break
+                else:
+                    result += data
+        for x in str(result, 'ascii', 'ignore').strip().split():
             yield tuple(x.rsplit('_', 1))

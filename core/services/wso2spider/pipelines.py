@@ -27,7 +27,7 @@ class Wso2SpiderPipeline(object):
     def process_item(self, item, spider):
         # clean unwanted spaces and incompatible characters from given text
         def sanitize(text: str) -> str:
-            return re.sub(r'\s{2,}', ' ', regex.sub('', text.strip())).strip()
+            return re.sub(r'\s{2,}', ' ', regex.sub(' ', text.strip())).strip()
 
         regex = re.compile(r'\\x[0-9a-fA-F]{2}')
 

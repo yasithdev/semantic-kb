@@ -24,7 +24,7 @@ class PostgresAPI:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS semantic_kb.sentences (
             id SERIAL PRIMARY KEY,
-            sentence TEXT UNIQUE)''')
+            sentence TEXT)''')
         # Create Table for Frames
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS semantic_kb.frames (
@@ -68,8 +68,7 @@ class PostgresAPI:
 
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence) VALUES (%s) ON CONFLICT (sentence) DO UPDATE 
-            SET sentence = EXCLUDED.sentence RETURNING id''', [sentence])
+            INSERT INTO semantic_kb.sentences (sentence) VALUES (%s) RETURNING id''', [sentence])
 
         # return the sentence_id
         sentence_id = self.cursor.fetchall()[0][0]

@@ -46,7 +46,7 @@ class MessageEngine:
         # get a list of tuples in the form (sentence, tokens, score) for the input message content
         for sentence, tokens, score in self.msg_parser.sent_tokenize_pos_tag_and_rate_msg(input_msg):
             # get the parametrized sentences, dictionary of entities, and its frames
-            parametrized_sentence, entity_dict = list(self.txt_parser.parametrize_sentence(sentence))[0]
+            parametrized_sentence, entity_dict = list(self.txt_parser.parametrize_text(sentence))[0]
             frames = self.txt_parser.get_frames(parametrized_sentence)
             # query matching sentences from database
             entities = set(entity_dict.keys())
