@@ -16,25 +16,25 @@ class DuplicatesPipeline(object):
 
     def process_item(self, item, spider):
         if item['_id'] in self.ids_seen:
-            raise DropItem("Duplicate item found: %s" % item)
+            raise DropItem("Duplicate item found")
         else:
             self.ids_seen.add(item['_id'])
             return item
 
 
 class Wso2SpiderPipeline(object):
-
     def process_item(self, item, spider):
         # clean unwanted spaces and incompatible characters from given text
-        def sanitize(text: str) -> str:
-            return re.sub(r'\s{2,}', ' ', regex.sub(' ', text.strip())).strip()
+        regex = re.compile(r'[\x80-\xff]|\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'])\s+')
 
-        regex = re.compile(r'\\x[0-9a-fA-F]{2}')
+        def sanitize(text: str) -> str:
+            return re.sub(r'\s{2,}', ' ', regex.sub('', text)).strip()
 
         # previous id, title and content
         id = item['_id']
         title = item['title']
         content = item['content']
+        urls = [{'name': key, 'url': item['urls'][key]} for key in dict.keys(item['urls'])]
 
         # updated variables for title and content
         filtered_title = sanitize(title)
@@ -43,7 +43,7 @@ class Wso2SpiderPipeline(object):
         for item in content:
             filtered_item = {
                 'heading': sanitize(item['heading']),
-                'text': ' '.join([x for x in [sanitize(y) for y in item['text']] if x != ''])
+                'text': sanitize('\n'.join(item['text']))
             }
             # only add filtered_item to filtered_content if any content is there
             if len(filtered_item['heading']) > 0 or len(filtered_item['text']) > 0:

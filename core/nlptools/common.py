@@ -160,7 +160,8 @@ Accepts a string containing *multiple* sentences, and return a list of sentences
     :return: list of sentences
     :rtype: list
     """
-    return re.split(r"[.:?]\s*(?=[A-Z])", input)
+    return [x.strip() for x in re.split(r"(?<=[a-zA-Z])[!.?;:]\s*(?=[A-Z])", input)
+            if x.strip() != '' and not len(x.strip()) < 2]
 
 
 def word_tokenize(input: str) -> list:

@@ -11,8 +11,9 @@ class MessageParser:
         :param input_text: input text
         :return: a generator of tuples in the format **(sentence, pos_tagged tokens, question_score)**
         """
+
         def get_score(wh: bool, md: bool, qmark: bool) -> float:
-            return float(wh + md + qmark)/3
+            return float(wh + md + qmark) / 3
 
         qmark_tag = False
         wh_tag = False

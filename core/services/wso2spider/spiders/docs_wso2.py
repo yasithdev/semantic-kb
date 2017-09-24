@@ -1,68 +1,50 @@
 # -*- coding: utf-8 -*-
-from scrapy.linkextractors import LinkExtractor
-from scrapy.spiders import Rule, CrawlSpider
+import re
 
+from scrapy.linkextractors import LinkExtractor
+from scrapy.selector import Selector
+from scrapy.spiders import Rule, CrawlSpider
+from tomd import Tomd
 
 class DocsWso2Spider(CrawlSpider):
     name = 'docs.wso2'
     allowed_domains = ['docs.wso2.com']
-    # All WSO2 Documentation URLs (Without PaaS)
     doc_urls = ['AM210', 'ApiCloud', 'EI611', 'EIP', 'IntegrationCloud', 'IS530', 'IdentityCloud', 'DAS310', 'IOTS310',
                 'DeviceCloud', 'ESB500']
     start_urls = [str('https://docs.wso2.com/display/' + p) for p in doc_urls]
+    # xpath variables
+    xpath_title = '//title//text()'
+    xpath_h1 = '//h1[contains(@class,"with-breadcrumbs")]//text()'
+    xpath_content = '//div[@class="wiki-content"]'
     # generate regex for matching the links that should be proceeded
-    allow_regex = r'.*com\/display\/(%s).*' % '|'.join(doc_urls)
-    rules = [Rule(LinkExtractor(allow=[allow_regex]), callback="parse_item", follow=True)]
+    re_clean = re.compile(r'><')
+    re_tags = re.compile(r'(<(?!\/).+?\/?>)|(<\/[\w\d\s]+?>)')
+    re_newline = re.compile(r'(\n\s*){2,}')
+    re_space = re.compile(r'(\s){2,}')
+    re_allowed = r'.*com\/display\/(%s).*' % '|'.join(doc_urls)
+    rules = [Rule(LinkExtractor(allow=[re_allowed]), callback="parse_item", follow=True)]
 
     @staticmethod
     def parse_item(response):
+        selector = response.selector
+        # [SCRAPE_RESULT Initialization]
         scrape_result = {
             '_id': str(response.url).split('?', 1)[0],
-            'title': response.css('title::text').extract_first(),
-            'content': []
+            'title': Selector.xpath(selector, DocsWso2Spider.xpath_title).extract_first(),
+            'heading': ' '.join([x.strip() for x in Selector.xpath(selector, DocsWso2Spider.xpath_h1).extract()]).strip(),
+            'content': '',
         }
-        main_heading = response.css('h1.with-breadcrumbs > a *::text').extract_first()
-        # scrape all possible content which can have text
-        scraped_contents = response.css(
-            '.wiki-content h2, .wiki-content h3, .wiki-content h4, .wiki-content h5, .wiki-content li, .wiki-content td, .wiki-content p, .wiki-content a')
-        scraped_contents.extract()
-
-        # initiate result item with the subtitle if its found, or with blank heading
-        if main_heading is not None:
-            result_item = {'heading': main_heading, 'text': []}
-        else:
-            result_item = {'heading': '', 'text': []}
-
-        def try_add_result_item():
-            if result_item['heading'] != '' or len(result_item['text']) > 0:
-                scrape_result['content'] += [result_item]
-
-        # LOGIC - flatten and assign all result_items into scrape_result content as a list of {heading, text}
-        ignore_set = set([])
-        for content in scraped_contents:
-            _heading = content.css('h2 *::text, h3 *::text, h4 *::text, h5 *::text').extract_first()
-            if _heading is not None:
-                # add current result_item to scrape_result content if it has some content
-                try_add_result_item()
-                # initialize result_item
-                result_item = {'heading': _heading, 'text': []}
-            else:
-                # get list of non-blank text matches
-                c = [x.strip() for x in content.css('*::text').extract() if x.strip() != '']
-                if content.css('td, li').extract_first() is not None:
-                    if len(c) > 0:
-                        result_item['text'] += ['|'] + c
-                    ignore_set = ignore_set.union(set(content.css('a::text, p::text').extract()))
-                else:
-                    temp_set = set(content.css('a::text, p::text').extract())
-                    if len(temp_set.intersection(ignore_set)) > 0:
-                        ignore_set = ignore_set.difference(temp_set)
-                        continue
-                    result_item['text'] += c
-
-        # add final result_item to scrape_result content if it has some content
-        try_add_result_item()
-
+        important_content = Selector.xpath(selector, DocsWso2Spider.xpath_content).extract_first()
+        # process content
+        content = DocsWso2Spider.re_clean.sub('>\n<', str(important_content))
+        markdown = Tomd(content).markdown
+        markdown = DocsWso2Spider.re_tags.sub('\n', markdown)
+        markdown = DocsWso2Spider.re_newline.sub('\n', markdown)
+        markdown = DocsWso2Spider.re_space.sub(' ', markdown)
+        markdown = markdown.strip()
+        # assign content to [SCRAPE_RESULT]
+        scrape_result['content'] = markdown
         # if scrape_result contains anything, yield it
-        if scrape_result['title'] is not None and len(scrape_result['content']) > 0:
+        if scrape_result['title'] is not None and scrape_result['content'] != '':
+            print(scrape_result)
             yield scrape_result

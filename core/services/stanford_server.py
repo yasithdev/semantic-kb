@@ -15,7 +15,8 @@ class StanfordServer:
         print('Starting Stanford Server on Port %d ...' % self.port, end='', flush=True)
         self.subprocess = subprocess.Popen(
             ['java', '-mx500m', '-cp', self.jar_path, self.classpath, '-model', self.model_path, '-port',
-             str(self.port), '-sentenceDelimiter', 'newline', '-tokenize', 'false'], stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+             str(self.port), '-sentenceDelimiter', 'newline', '-tokenize', 'false'], stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE)
         status = True
         # Wait while Server is Started, or terminate if error occurred
         try:

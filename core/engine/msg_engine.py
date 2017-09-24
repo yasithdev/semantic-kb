@@ -25,9 +25,9 @@ class MessageEngine:
         if len(sent_ids) > 1:
             for i in range(len(sent_ids)):
                 yield sent_ids[i]
-                if i+1 < len(sent_ids):
-                    if sent_ids[i+1] - sent_ids[i] < __threshold__:
-                        for x in range(sent_ids[i] + 1, sent_ids[i+1]):
+                if i + 1 < len(sent_ids):
+                    if sent_ids[i + 1] - sent_ids[i] < __threshold__:
+                        for x in range(sent_ids[i] + 1, sent_ids[i + 1]):
                             yield x
         elif len(sent_ids) == 1:
             for x in range(sent_ids[0], sent_ids[0] + __threshold__):

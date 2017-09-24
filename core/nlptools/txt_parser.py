@@ -3,7 +3,7 @@ from difflib import SequenceMatcher
 from nltk import (RegexpParser)
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
-
+import re
 from core.nlptools import common
 
 
@@ -13,9 +13,9 @@ class TextParser:
         return SequenceMatcher(None, a, b).ratio()
 
     @staticmethod
-    def get_frames(input_phrase: str, verbose=False, search_entities: bool=False) -> set:
+    def get_frames(input_phrase: str, verbose=False, search_entities: bool = False) -> set:
         sanitized_phrase = common.sanitize(input_phrase, preserve_entities=search_entities)
-        print('# frame query-> %s' % sanitized_phrase)
+        print('# frame query-> %s' % re.escape(sanitized_phrase))
         pos_tagged_tokens = common.pos_tag(sanitized_phrase, wordnet_pos=True, ignored_words=['ENTITY'])
         lem = WordNetLemmatizer()
         results = {}
@@ -34,11 +34,15 @@ class TextParser:
                 print('IGNORED -> %s' % lemma)
                 continue
 
+            # If lemma is a small string, do not check for it since it may be a punctuation mark, etc
+            if len(lemma) < 2:
+                continue
+
             # Get LUs matching lemma
             if verbose:
                 print('{0!s:-<25}'.format(token))
 
-            lex_units = fn.lus(r'(?i)(\A|(?<=\s))(%s)(\s.*)?\.(%s).*' % (lemma, token[1]))
+            lex_units = fn.lus(r'(?i)(\A|(?<=\s))(%s)(\s.*)?\.(%s).*' % (re.escape(lemma), token[1]))
 
             # For lemmas that do not return lexical unit matches
             if len(lex_units) == 0:

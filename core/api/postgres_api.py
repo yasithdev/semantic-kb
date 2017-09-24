@@ -87,8 +87,8 @@ class PostgresAPI:
         def get_matching_entity_ids(input_entities: set) -> set:
             for entity in input_entities:
                 self.cursor.execute('''
-                            SELECT DISTINCT id from semantic_kb.entities WHERE entity LIKE '%%{0}%%'
-                            OR semantic_kb.levenshtein(entity, '{0}') <= 3'''.format(entity))
+                            SELECT DISTINCT id from semantic_kb.entities WHERE char_length(entity) < 255 AND (entity LIKE '%%{0}%%'
+                            OR semantic_kb.levenshtein(entity, '{0}') <= 2)'''.format(entity))
                 return set([int(result[0]) for result in self.cursor.fetchall()])
 
         # Get the sentence ids of the sentences containing the passed entity ids
@@ -140,7 +140,7 @@ class PostgresAPI:
 
     def get_sentences_by_id(self, sentence_ids: list) -> next:
         for id in sentence_ids:
-            self.cursor.execute('''SELECT DISTINCT id, sentence from semantic_kb.sentences WHERE id=%s''', [id])
+            self.cursor.execute('''SELECT DISTINCT id, sentence FROM semantic_kb.sentences WHERE id=%s''', [id])
             # get the sentence text and return the output as a list
             result = self.cursor.fetchone()
             if result is not None:
