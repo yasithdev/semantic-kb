@@ -4,9 +4,11 @@
 #
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/en/latest/topics/item-pipeline.html
+import logging
 import re
 
 import pymongo
+from scrapy import Spider
 from scrapy.exceptions import DropItem
 
 
@@ -23,41 +25,35 @@ class DuplicatesPipeline(object):
 
 
 class Wso2SpiderPipeline(object):
+    # constants
+    regex = re.compile(r'\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'])\s+')
+
     def process_item(self, item, spider):
         # clean unwanted spaces and incompatible characters from given text
-        regex = re.compile(r'[\x80-\xff]|\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'])\s+')
-
         def sanitize(text: str) -> str:
-            return re.sub(r'\s{2,}', ' ', regex.sub('', text)).strip()
-
-        # previous id, title and content
-        id = item['_id']
-        title = item['title']
-        content = item['content']
-        urls = [{'name': key, 'url': item['urls'][key]} for key in dict.keys(item['urls'])]
+            content = re.sub(r'\s{2,}', ' ', self.regex.sub('', text)).strip()
+            if content == '':
+                return content
+            elif content[0] == '<' and content[-1] == '>':
+                return '`%s`' % content
+            else:
+                return content
 
         # updated variables for title and content
-        filtered_title = sanitize(title)
-        filtered_content = []
-
-        for item in content:
-            filtered_item = {
-                'heading': sanitize(item['heading']),
-                'text': sanitize('\n'.join(item['text']))
-            }
-            # only add filtered_item to filtered_content if any content is there
-            if len(filtered_item['heading']) > 0 or len(filtered_item['text']) > 0:
-                filtered_content += [filtered_item]
+        filtered_title = sanitize(item['title'])
+        filtered_heading = sanitize(item['heading'])
+        filtered_content = [sanitize(line) for line in str(item['content']).splitlines() if sanitize(line) != '']
 
         # return only if item is validated as a doc content
-        if len(filtered_title) > 0 and len(filtered_content) > 0:
+        if (len(filtered_title) > 0 or len(filtered_heading) > 0) and len(filtered_content) > 0:
             return {
-                '_id': id,
+                '_id': item['_id'],
                 'title': filtered_title,
+                'heading': filtered_heading,
                 'content': filtered_content
             }
         else:
-            raise DropItem("Missing title or content")
+            raise DropItem("Missing title and heading or content")
 
 
 class MongoPipeline(object):
@@ -83,4 +79,5 @@ class MongoPipeline(object):
 
     def process_item(self, item, spider):
         self.db[self.collection_name].insert_one(dict(item))
+        Spider.log(spider, 'inserted %s' % item['_id'], logging.DEBUG)
         return item

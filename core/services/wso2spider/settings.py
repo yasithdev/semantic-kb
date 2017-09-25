@@ -65,7 +65,7 @@ ROBOTSTXT_OBEY = True
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
     'wso2spider.pipelines.DuplicatesPipeline': 200,
-    'wso2spider.pipelines.Wso2SpiderPipeline': None,
+    'wso2spider.pipelines.Wso2SpiderPipeline': 300,
     'wso2spider.pipelines.MongoPipeline': 400
 }
 
