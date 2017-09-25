@@ -9,12 +9,12 @@ db_api = PostgresAPI()
 msgEngine = MessageEngine(db_api)
 
 # # Initialize Stanford Server
-# with StanfordServer():
-while True:
-    message = input('Q > ').strip()
-    if message == 'exit':
-        break
-    elif message == '':
-        continue
-    answer = '. '.join(msgEngine.process_message(message))
-    print('A > %s' % answer + '.')
+with StanfordServer():
+    while True:
+        message = input('Q > ').strip()
+        if message == 'exit':
+            break
+        elif message == '':
+            continue
+        answer = '. '.join(msgEngine.process_message(message))
+        print('A > %s' % answer + '.')

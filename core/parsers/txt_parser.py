@@ -4,7 +4,7 @@ from nltk import (RegexpParser)
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
 import re
-from core.nlptools import common
+from core.parsers import common
 
 
 class TextParser:

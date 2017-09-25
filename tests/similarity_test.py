@@ -1,5 +1,5 @@
 from core.api import PostgresAPI
-from core.nlptools import TextParser
+from core.parsers import TextParser
 
 entities = PostgresAPI().get_all_entities()
 textParser = TextParser()

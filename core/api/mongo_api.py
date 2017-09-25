@@ -2,7 +2,11 @@ from pymongo import MongoClient
 
 
 class MongoAPI:
-    _collection_name = 'scraped_docs'
+    # Constants
+    SCRAPED_DOCS = 'scraped_docs'
+    ENTITIES = 'entities'
+    FRAMES = 'frames'
+
     _mongo_uri = 'localhost'
     _mongo_db = 'kb'
 
@@ -13,8 +17,8 @@ class MongoAPI:
         self.client = MongoClient(self.mongo_uri)
         self.db = self.client[self.mongo_db]
 
-    def get_all_documents(self, collection_name: str = _collection_name) -> next:
+    def get_all_documents(self, collection_name: str) -> next:
         return self.db[collection_name].find()
 
-    def get_document_count(self, collection_name: str = _collection_name) -> int:
+    def get_document_count(self, collection_name: str) -> int:
         return self.db[collection_name].count()

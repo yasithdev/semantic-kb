@@ -1,4 +1,4 @@
-from core.nlptools import (MessageParser as _MessageParser, TextParser as _TextParser, common)
+from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, common)
 
 
 class MessageEngine:

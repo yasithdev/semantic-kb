@@ -1,4 +1,4 @@
-from core.nlptools import common
+from core.parsers import common
 
 
 class MessageParser:
