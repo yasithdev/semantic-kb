@@ -6,12 +6,13 @@ from core.services import StanfordServer
 
 
 # data insertion as sentences and entities
-def populate_kb(heading: list, sentences: list, postgres_api: PostgresAPI, mongo_api: MongoAPI):
+def populate_kb(headings: list, sentences: list, postgres_api: PostgresAPI, mongo_api: MongoAPI):
+    # insert all headings and get the immediate heading id
+    heading_id = postgres_api.insert_headings(headings)
+    # insert the sentences using that heading id
     for sentence in sentences:
-        for parametrized_sentence in TextParser.parametrize_text(sentence):
-            sentence = str(parametrized_sentence[0])
-            entity_dict = dict(parametrized_sentence[1])
-            postgres_api.insert_sentence(sentence, entity_dict)
+        for parametrized_sentence, entity_normalization in TextParser.parametrize_text(sentence):
+            postgres_api.insert_sentence(parametrized_sentence, entity_normalization, heading_id)
 
 
 def run_test(postgres_api: PostgresAPI, mongo_api: MongoAPI):

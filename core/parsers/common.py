@@ -7,13 +7,11 @@ from nltk.util import breadth_first
 
 from core.api import StanfordAPI
 
+MAX_LEAF_LENGTH = 25
+MAX_ENTITY_LENGTH = 100
 
 def parametrize_entity(entity: str) -> str:
-    return '[%s(E:%s|@:%d)]' % (entity, normalize_entity(entity), 0)
-
-
-def entities_from_parametrized_sent(parametrized_sentence: str) -> list:
-    return re.findall(r'\[.+?\(E:(.+?)\|@:\d+?\)\]', parametrized_sentence)
+    return '[%s(@E)]' % entity
 
 
 def normalize_entity(entity: str) -> str:
@@ -26,6 +24,7 @@ Normalize the entity into **lowercase**, **singular** form
     lemmatizer = WordNetLemmatizer()
     # convert entity to lowercase
     entity = entity.lower()
+    entity = re.sub(r'[^A-Za-z0-9]', '', entity)
     # get rightmost word
     matches = re.findall(r'(?<=[\\\s\-:/])(\w+)$', entity)
     if len(matches) == 0:
@@ -33,19 +32,22 @@ Normalize the entity into **lowercase**, **singular** form
     else:
         rightmost_word = matches[-1]
         lem_word = lemmatizer.lemmatize(rightmost_word)
-        return entity.replace(rightmost_word, lem_word)
+        return entity.replace(rightmost_word, lem_word).replace(' ', '')
 
 
-def generate_parametrized_sent(tree: Tree) -> str:
+def parametrize_and_normalize_tree(tree: Tree, max_leaf_length: int = MAX_LEAF_LENGTH, max_entity_length: int = MAX_ENTITY_LENGTH) -> tuple:
     """
 Accepts a **NLTK tree**, and convert into a parametrized sentence with entities wrapped in the form
-[**original_phrase** (E:**entity_name** |@:**entity_index** )]. *entity_index* will be set as 0 since it is unknown at
-this point, and should be replaced later on
+[**original_phrase**(@E)]. Return the parametrized sentence, and the entity normalization
+of the entities in a dict
+    :param max_entity_length:
+    :param max_leaf_length:
     :param tree: NLTK Tree
-    :return: tuple in the format (*parametrized_sentence*, *entity_dict*)
+    :return: tuple in the format (*parametrized_sentence*, *entity_normalization*)
     :rtype: tuple
     """
     parametrized_sentence = ''
+    entity_normalization = {}
     for node in breadth_first(tree, maxdepth=1):
         try:
             if node.label() == 'S':
@@ -62,13 +64,28 @@ this point, and should be replaced later on
                     if not isinstance(leaf, Tree):
                         continue
                     # If an entity is found
-                    if leaf.label() == 'ENT':
+                    if leaf.label() == 'EN':
                         # Generate entity from tree leaves
-                        entity = ' '.join([l[0] for l in leaf.leaves()])
-                        # Replace the original entity with entity wrapper
-                        phrase = phrase.replace(entity, parametrize_entity(entity))
+                        entity_leaves = [l[0] for l in leaf.leaves()]
+
+                        def split_long_entities(leaf_list, ml):
+                            si = 0
+                            for i, l in enumerate(leaf_list):
+                                if len(l) > ml and si < i:
+                                    yield leaf_list[si:i]
+                                    si = i+1
+                            if si < len(leaf_list):
+                                yield leaf_list[si:]
+
+                        split_entities = list(split_long_entities(entity_leaves, max_leaf_length))
+                        for entity in [' '.join(x) for x in split_entities]:
+                            # validation constraints
+                            if max_entity_length >= len(entity) > 1 and float(len(entity) - len(re.findall(r'[^A-Za-z0-9\s]', entity)))/len(entity) > 0.5:
+                                # Replace the original entity(ies) with entity wrapper
+                                phrase = phrase.replace(entity, parametrize_entity(entity))
+                                entity_normalization[entity] = normalize_entity(entity)
                 parametrized_sentence = ' '.join([parametrized_sentence, phrase]).replace(" 's", "'s")
-    return parametrized_sentence
+    return parametrized_sentence, entity_normalization
 
 
 def get_wordnet_pos(treebank_tag: str) -> str:
@@ -127,10 +144,10 @@ Named Entity tags are replace with the keyword ENTITY (if preserve_entities = Fa
     # sanitize entity wrappers
     if preserve_entities:
         # substitute entity names to entity wrapper
-        entity_sanitized_sent = re.sub(r'\[(.+?)\(E:(.+?)\|@:(\d+?)\)\]', r'\1', entity_sanitized_sent).strip()
+        entity_sanitized_sent = re.sub(r'\[(.+?)\(@E\)\]', r'\1', entity_sanitized_sent).strip()
     else:
         # substitute the placeholder ENTITY to entity wrapper
-        entity_sanitized_sent = re.sub(r'\[.+?\(E:.+?\|@:\d+?\)\]', 'ENTITY', entity_sanitized_sent).strip()
+        entity_sanitized_sent = re.sub(r'\[(.+?)\(@E\)\]', 'ENTITY', entity_sanitized_sent).strip()
 
     # sanitize bracket tags
     if preserve_entities:

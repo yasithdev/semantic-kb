@@ -6,6 +6,7 @@ class MongoAPI:
     SCRAPED_DOCS = 'scraped_docs'
     ENTITIES = 'entities'
     FRAMES = 'frames'
+    KNOWLEDGE_BASE = 'knowledge_base'
 
     _mongo_uri = 'localhost'
     _mongo_db = 'kb'
@@ -22,3 +23,6 @@ class MongoAPI:
 
     def get_document_count(self, collection_name: str) -> int:
         return self.db[collection_name].count()
+
+    def insert_document(self, collection_name: str, document: dict):
+        self.db[collection_name].insert_one(document)

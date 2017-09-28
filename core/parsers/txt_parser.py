@@ -78,17 +78,20 @@ class TextParser:
 
             # Extract phrases according to english grammar
             grammar = '''
-                # Adjective Chunks
-                ADJ: {(<RB>?<JJ><CC>?<RB>?<JJ>?)+}
+            
+                # Adjectives (Composite)
+                CA: { <JJR><VB.*>|<RB>?<JJ> }
                 
-                # Entity Chunks
-                ENT: {(<ADJ>*<NN.*|FW>+<IN>)?<ADJ>*<NN.*>+|<ADJ>*<FW>+|<ADJ|NN><VBG>+<NN.*>?}
+                # Adjectives
+                AJ: { <CA>(<CC>?<CA>)* }
                 
-                # Preposition Chunks
-                PP:  {(<DT>|<CD>(<CC>?<CD|JJR>)?)<VB.*>?}
+                # Entities
+                EN: {<AJ>?<NN.*>+}
+                    {<AJ>?<FW>+}
+                    {<AJ|NN><VBG>+<NN.*>?}
                 
-                # Noun-phrase Chunks
-                NP: {<PP>*(<CC>?<ENT>)+}
+                # Noun-phrases
+                NP: {<DT>?<CC>?(<CC><CD>)*<EN>(<CC>?<EN>)*}
                 
                 # Rest should be considered as a Verb-Phrase Chunk
                 VP: {<.*>+}
@@ -99,11 +102,9 @@ class TextParser:
             cp = RegexpParser(grammar)
             try:
                 parse_tree = cp.parse(pos_tagged_tokens)
+                # Tag the relevant entities from a parse tree and generate a parametrized sentence
+                parametrized_sentence, entity_normalization = common.parametrize_and_normalize_tree(parse_tree)
+                yield parametrized_sentence, entity_normalization
             except Exception:
                 print(Exception)
                 input(pos_tagged_tokens)
-
-            # Tag the relevant entities from a parse tree and generate a parametrized sentence
-            parametrized_sentence = common.generate_parametrized_sent(parse_tree)
-            sentence_entities = common.entities_from_parametrized_sent(parametrized_sentence)
-            yield parametrized_sentence, {entity: 0 for entity in sentence_entities}
