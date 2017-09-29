@@ -115,7 +115,7 @@ class PostgresAPI:
                 TB.heading,
                 TB.index
               FROM traverse_both TB
-              ORDER BY index DESC, heading_id DESC;
+              ORDER BY index ASC, heading_id ASC;
             END; $$
             LANGUAGE plpgsql
         ''')
@@ -199,10 +199,10 @@ class PostgresAPI:
     def get_sentences_by_id(self, sentence_ids: list) -> next:
         for id in sentence_ids:
             self.cursor.execute('''
-              SELECT DISTINCT sentence_id, sentence, 
-              (SELECT string_agg(content, ' > ') FROM semantic_kb.get_hierarchy(sentence_id)
-              WHERE index <= 0 ORDER BY index ASC) heading_hierarchy 
-              FROM semantic_kb.sentences WHERE id=%s''', [id])
+              SELECT DISTINCT S.sentence_id, S.sentence,
+              (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH
+              WHERE GH.index <= 0) heading_hierarchy
+              FROM semantic_kb.sentences S WHERE S.sentence_id=%s''', [id])
             # get the sentence text and return the output as a list
             result = self.cursor.fetchone()
             if result is not None:
@@ -298,3 +298,16 @@ class PostgresAPI:
         else:
             # Option 3 - No entity matching sentences. Return no results
             return set([])
+
+    def group_sentences_by_heading(self, sentence_ids: set) -> list:
+        if sentence_ids is None or len(sentence_ids) == 0:
+            return []
+        sentence_id_param = str(sentence_ids).replace('{', '').replace('}', '')
+        self.cursor.execute('''
+          SELECT 
+            (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH 
+            WHERE GH.index <= 0) heading, 
+            array_agg(sentence_id ORDER BY sentence_id ASC) FROM semantic_kb.sentences WHERE sentence_id IN (%s)
+          GROUP BY heading_id
+        ''' % sentence_id_param)
+        return self.cursor.fetchall()

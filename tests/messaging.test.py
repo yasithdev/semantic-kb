@@ -8,17 +8,23 @@ from core.services import StanfordServer
 db_api = PostgresAPI()
 msgEngine = MessageEngine(db_api)
 
-# # Initialize Stanford Server
 def run_test():
-    with StanfordServer():
-        while True:
-            message = input('Q > ').strip()
-            if message == 'exit':
-                break
-            elif message == '':
-                continue
-            answer = '. '.join(msgEngine.process_message(message))
-            print('A > %s' % answer + '.')
+    while True:
+        message = input('Q > ').strip()
+        if message == 'exit':
+            break
+        elif message == '':
+            continue
+        answer = '. '.join(msgEngine.process_message(message))
+        print('A > %s' % answer + '.')
 
 if __name__ == '__main__':
-    run_test()
+    try:
+        # Assume Stanford Server is running, and try test
+        run_test()
+    except ConnectionRefusedError:
+        print('ERROR - Stanford Server has not started')
+        # Initialize Stanford Server and try test
+        with StanfordServer():
+            run_test()
+
