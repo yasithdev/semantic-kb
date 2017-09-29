@@ -12,7 +12,7 @@ class DocsWso2Spider(CrawlSpider):
     name = 'docs.wso2'
     allowed_domains = ['docs.wso2.com']
     doc_urls = ['AM210', 'ApiCloud', 'EI611', 'EIP', 'IntegrationCloud', 'IS530', 'IdentityCloud', 'DAS310', 'IOTS310',
-                'DeviceCloud', 'ESB500']
+                'DeviceCloud']
     start_urls = [str('https://docs.wso2.com/display/' + p) for p in doc_urls]
     # declare xpath variables
     xpath_title = '//title//text()'
@@ -35,7 +35,11 @@ class DocsWso2Spider(CrawlSpider):
         if _name == 'a':
             _href = Tag.get(tag, "href")
             if _href is not None:
-                content = '%s[%s](%s)%s' % (ls, content.strip(), _href, rs)
+                if _href[0] == '/':
+                    _href = 'https://docs.wso2.com%s' % _href
+                # Only add href if its a doc link, and not a marker
+                if not _href[0] == '#':
+                    content = '%s[%s](%s)%s' % (ls, content.strip(), _href, rs)
         # If child is a heading tag, append #
         elif _name[0] == 'h':
             x = _name[1]

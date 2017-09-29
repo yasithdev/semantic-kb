@@ -28,7 +28,7 @@ class PostgresAPI:
 
         # Create Table for Headings
         cursor.execute('''
-            CREATE TABLE semantic_kb.headings (
+            CREATE TABLE IF NOT EXISTS semantic_kb.headings (
               heading_id SERIAL PRIMARY KEY,
               heading TEXT,
               parent_id INTEGER REFERENCES semantic_kb.headings(heading_id),
@@ -62,7 +62,71 @@ class PostgresAPI:
         # Add Fuzzy String match extensions for semantic_kb
         cursor.execute('''CREATE EXTENSION fuzzystrmatch WITH SCHEMA semantic_kb''')
 
+        # Add ROOT Record for Headings. Every heading maps to this (To avoid foreign key violations)
+        # TODO try a better approach
         cursor.execute('''INSERT INTO semantic_kb.headings (heading, parent_id) VALUES ('ROOT', NULL)''')
+
+        # Add Function to get heading hierarchy
+        cursor.execute('''
+            CREATE OR REPLACE FUNCTION semantic_kb.get_hierarchy(id INT)
+              RETURNS TABLE(
+                heading_id INTEGER,
+                heading    TEXT,
+                index      INTEGER
+              ) AS
+            $$ BEGIN
+              RETURN QUERY
+              WITH RECURSIVE
+                  traverse_down(heading_id, heading, parent_id, index) AS (
+                  SELECT
+                    H.heading_id,
+                    H.heading,
+                    H.parent_id,
+                    0
+                  FROM semantic_kb.headings AS H
+                  WHERE H.heading_id = id
+                  UNION DISTINCT
+                  SELECT
+                    H.heading_id,
+                    H.heading,
+                    H.parent_id,
+                    HRF.index + 1
+                  FROM semantic_kb.headings H
+                    JOIN traverse_down HRF ON H.parent_id = HRF.heading_id
+                ),
+                  traverse_both(heading_id, heading, parent_id, index) AS (
+                  SELECT
+                    H.heading_id,
+                    H.heading,
+                    H.parent_id,
+                    H.index
+                  FROM traverse_down H
+                  UNION DISTINCT
+                  SELECT
+                    H.heading_id,
+                    H.heading,
+                    H.parent_id,
+                    HRF.index - 1
+                  FROM semantic_kb.headings H
+                    JOIN traverse_both HRF ON H.heading_id = HRF.parent_id
+                )
+              SELECT
+                TB.heading_id,
+                TB.heading,
+                TB.index
+              FROM traverse_both TB
+              ORDER BY index DESC, heading_id DESC;
+            END; $$
+            LANGUAGE plpgsql
+        ''')
+
+        # Create View for observing content under each heading
+        self.cursor.execute('''
+            CREATE OR REPLACE VIEW semantic_kb.heading_content AS 
+            SELECT heading, string_agg(sentence, '. ') AS content FROM semantic_kb.sentences 
+            JOIN semantic_kb.headings USING(heading_id)
+            GROUP BY heading_id, heading
+        ''')
 
         # Commit the DDL
         self.conn.commit()
@@ -80,7 +144,7 @@ class PostgresAPI:
     def insert_heading(self, heading: str, parent_id: int = None) -> int:
         # Insert one heading along with its parent_id, and return the new heading_id
         self.cursor.execute('''
-            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%S, COALESCE(%s,1))
+            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%s, COALESCE(%s,1))
             ON CONFLICT(heading, parent_id) 
             DO UPDATE SET heading = EXCLUDED.heading, parent_id = EXCLUDED.parent_id
             RETURNING heading_id''',
@@ -98,7 +162,7 @@ class PostgresAPI:
     def insert_sentence(self, sentence: str, entity_normalization: dict, heading_id: int = None) -> int:
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%S, %S) RETURNING sentence_id''',
+            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%s, %s) RETURNING sentence_id''',
                             [sentence, heading_id]
                             )
         sentence_id = self.cursor.fetchone()[0]
@@ -109,14 +173,14 @@ class PostgresAPI:
             if len(entity) >= 100:
                 continue
             self.cursor.execute('''
-                INSERT INTO semantic_kb.entities (entity) VALUES (%S) 
+                INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
                 RETURNING entity_id''', [entity_normalization[entity]])
             entity_id = self.cursor.fetchall()[0][0]
             # Insert normalization record to map normalization -> original string
             self.cursor.execute('''
                 INSERT INTO semantic_kb.normalizations(sentence_id, entity_id, raw_entity) VALUES 
-                (%S, %S, %S)''', [sentence_id, entity_id, entity])
+                (%s, %s, %s)''', [sentence_id, entity_id, entity])
         self.conn.commit()
         print('.', end='', flush=True)
         return int(sentence_id)
@@ -124,36 +188,25 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%S, %S)''', [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
         self.conn.commit()
 
     def get_heading_hierarchy(self, heading_id: int) -> list:
-        self.cursor.execute('''
-            WITH RECURSIVE
-                traverse_down(heading_id, heading, parent_id, index) AS (
-                SELECT H.heading_id, H.heading, H.parent_id, 0 FROM semantic_kb.headings AS H WHERE H.heading_id =%s
-                UNION DISTINCT
-                SELECT H.heading_id, H.heading, H.parent_id, HRF.index+1 FROM semantic_kb.headings H
-                JOIN traverse_down HRF ON H.parent_id = HRF.heading_id
-                ),
-                traverse_both(heading_id, heading, parent_id, index) AS (
-                SELECT H.heading_id, H.heading, H.parent_id, H.index FROM traverse_down H
-                UNION DISTINCT
-                SELECT H.heading_id, H.heading, H.parent_id, HRF.index-1 FROM semantic_kb.headings H
-                JOIN traverse_both HRF ON H.heading_id = HRF.parent_id
-                )
-            SELECT heading_id, heading, index FROM traverse_both 
-            ORDER BY index DESC, heading_id DESC''', [heading_id])
+        self.cursor.execute('''SELECT heading_id, heading, index from semantic_kb.get_hierarchy(%s)'''
+        , [heading_id])
         return self.cursor.fetchall()
 
     def get_sentences_by_id(self, sentence_ids: list) -> next:
         for id in sentence_ids:
             self.cursor.execute('''
-              SELECT DISTINCT sentence_id, sentence FROM semantic_kb.sentences WHERE id=%s''', [id])
+              SELECT DISTINCT sentence_id, sentence, 
+              (SELECT string_agg(content, ' > ') FROM semantic_kb.get_hierarchy(sentence_id)
+              WHERE index <= 0 ORDER BY index ASC) heading_hierarchy 
+              FROM semantic_kb.sentences WHERE id=%s''', [id])
             # get the sentence text and return the output as a list
             result = self.cursor.fetchone()
             if result is not None:
-                yield result[1]
+                yield result
 
     def get_all_sentences(self) -> tuple:
         self.cursor.execute('SELECT sentence_id, sentence FROM semantic_kb.sentences')

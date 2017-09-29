@@ -54,7 +54,8 @@ class MessageEngine:
                 answers_with_params = self.api.get_sentences_by_id(sentence_ids)
                 # check whether any answers returned
                 any_answers = False
-                for answer_with_param in answers_with_params:
+                for answer_with_param, heading_hierarchy in answers_with_params:
+                    input(heading_hierarchy)
                     if not any_answers:
                         any_answers = True
                     yield common.sanitize(answer_with_param, preserve_entities=True)

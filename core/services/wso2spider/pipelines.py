@@ -26,7 +26,7 @@ class DuplicatesPipeline(object):
 
 class Wso2SpiderPipeline(object):
     # constants
-    regex = re.compile(r'\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'])\s+')
+    regex = re.compile(r'\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'\\\/])\s+')
 
     def process_item(self, item, spider):
         # clean unwanted spaces and incompatible characters from given text
