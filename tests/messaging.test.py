@@ -15,8 +15,11 @@ def run_test():
             break
         elif message == '':
             continue
-        answer = '. '.join(msgEngine.process_message(message))
-        print('A > %s' % answer + '.')
+
+        answers = msgEngine.process_and_answer(message)
+        print('A > ')
+        for heading, content in answers:
+            print('\033[1m' + heading + '\033[0m' + '\n' + content)
 
 if __name__ == '__main__':
     try:

@@ -199,9 +199,7 @@ class PostgresAPI:
     def get_sentences_by_id(self, sentence_ids: list) -> next:
         for id in sentence_ids:
             self.cursor.execute('''
-              SELECT DISTINCT S.sentence_id, S.sentence,
-              (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH
-              WHERE GH.index <= 0) heading_hierarchy
+              SELECT DISTINCT S.sentence_id, S.sentence
               FROM semantic_kb.sentences S WHERE S.sentence_id=%s''', [id])
             # get the sentence text and return the output as a list
             result = self.cursor.fetchone()

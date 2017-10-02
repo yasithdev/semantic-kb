@@ -3,7 +3,7 @@ from core.parsers import common
 
 class MessageParser:
     @staticmethod
-    def sent_tokenize_pos_tag_and_rate_msg(input_text: str, include_entity_names: bool = True) -> next:
+    def sent_tokenize_pos_tag_and_calculate_score(input_text: str, include_entity_names: bool = True) -> next:
         """
     Get an input text, break into sentences, pos-tag the sentence, and calculate a question score indicating how likely
     the sentence is a question
