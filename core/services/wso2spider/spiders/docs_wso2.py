@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-import re
+
+from unicodedata import normalize
 
 from bs4 import BeautifulSoup, Tag
 from scrapy.linkextractors import LinkExtractor
 from scrapy.selector import Selector
 from scrapy.spiders import Rule, CrawlSpider
-from unicodedata import normalize
 
 
 class DocsWso2Spider(CrawlSpider):
@@ -16,6 +16,7 @@ class DocsWso2Spider(CrawlSpider):
     start_urls = [str('https://docs.wso2.com/display/' + p) for p in doc_urls]
     # declare xpath variables
     xpath_title = '//title//text()'
+    xpath_page_hierarchy = '//ol[@id="breadcrumbs"]//li[not(@class="first") and not(@id="ellipsis")]//text()[normalize-space()]'
     xpath_h1 = '//h1[contains(@class,"with-breadcrumbs")]//text()'
     xpath_content = '//div[@class="wiki-content"]'
     # generate rules for matching the links that should be proceeded
@@ -58,7 +59,7 @@ class DocsWso2Spider(CrawlSpider):
         return content
 
     @staticmethod
-    def extract_recursive(tag: Tag, separator_tags: list = list([])) -> str:
+    def extract_recursive(tag: Tag, separator_tags: list, ignored_classes: list) -> str:
         output_string = ''
         for child in tag.childGenerator():
             # ---
@@ -71,7 +72,7 @@ class DocsWso2Spider(CrawlSpider):
                 _class = Tag.get(child, "class")
                 if _class is not None:
                     _className = ' '.join(_class)
-                    if _className.find('code panel') != -1 or _className.find('expand-container') != -1:
+                    if max(_className.find(c) for c in ignored_classes) > -1:
                         continue
                 # ---
                 # DFT into node's children
@@ -82,8 +83,20 @@ class DocsWso2Spider(CrawlSpider):
                 # ---
                 if _name == "pre":
                     continue
+                # ---
+                # skip table content having thead or th or grey headers
+                # ---
+                if _name == "table":
+                    if child.find('thead') is not None:
+                        continue
+                    elif child.find('th') is not None:
+                        continue
+                    elif child.find(attrs={'class' : 'highlight-grey confluenceTd'}) is not None:
+                        continue
                 # [IMPORTANT] append text to output in the Markdown Syntax
-                output_string += DocsWso2Spider.markdown_format(child, DocsWso2Spider.extract_recursive(child, separator_tags))
+                output_string += DocsWso2Spider.markdown_format(child,
+                                                                DocsWso2Spider.extract_recursive(child, separator_tags,
+                                                                                                 ignored_classes))
                 # Append newline if current tag in newline_tags list
                 if _name in separator_tags:
                     output_string += '\n'
@@ -101,6 +114,7 @@ class DocsWso2Spider(CrawlSpider):
     def parse_item(response):
         # Assign variables
         _separator_tags = ['p', 'td', 'li', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7']
+        _ignored_classes = ['code panel', 'expand-container']
         selector = response.selector
         important_content = Selector.xpath(selector, DocsWso2Spider.xpath_content).extract_first()
         if important_content is None:
@@ -110,9 +124,12 @@ class DocsWso2Spider(CrawlSpider):
         scrape_result = {
             '_id': str(response.url).split('?', 1)[0],
             'title': Selector.xpath(selector, DocsWso2Spider.xpath_title).extract_first(),
+            'hierarchy': [x.strip() for x in Selector.xpath(selector, DocsWso2Spider.xpath_page_hierarchy).extract()],
             'heading': ' '.join(
                 [x.strip() for x in Selector.xpath(selector, DocsWso2Spider.xpath_h1).extract()]).strip(),
-            'content': normalize('NFKD', DocsWso2Spider.extract_recursive(soup, _separator_tags)).encode('ASCII', 'ignore').decode('ASCII')
+            'content': normalize('NFKD',
+                                 DocsWso2Spider.extract_recursive(soup, _separator_tags, _ignored_classes)).encode(
+                'ASCII', 'ignore').decode('ASCII')
         }
         # if scrape_result contains anything, yield it
         if scrape_result['title'] is not None and scrape_result['content'] != '':

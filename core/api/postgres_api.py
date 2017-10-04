@@ -175,7 +175,7 @@ class PostgresAPI:
             self.cursor.execute('''
                 INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
-                RETURNING entity_id''', [entity_normalization[entity]])
+                RETURNING entity_id''', [entity])
             entity_id = self.cursor.fetchall()[0][0]
             # Insert normalization record to map normalization -> original string
             self.cursor.execute('''
@@ -231,7 +231,7 @@ class PostgresAPI:
                       OR entity LIKE '%%{0}' 
                       OR semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) <= {1}
                     ) 
-                    ORDER BY length(entity) LIMIT 15
+                    ORDER BY length(entity) LIMIT 5
                     '''.format(entity, ERROR_TOLERANCE))
                 matches += [set([int(result[0]) for result in self.cursor.fetchall()])]
             # sort matches in ascending order of match lengths, and get the intersection
@@ -305,7 +305,7 @@ class PostgresAPI:
           SELECT 
             (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH 
             WHERE GH.index <= 0) heading, 
-            array_agg(sentence_id ORDER BY sentence_id ASC) FROM semantic_kb.sentences WHERE sentence_id IN (%s)
+            array_agg(sentence_id ORDER BY sentence_id ASC) sentence_ids FROM semantic_kb.sentences WHERE sentence_id IN (%s)
           GROUP BY heading_id
         ''' % sentence_id_param)
         return self.cursor.fetchall()

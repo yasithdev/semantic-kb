@@ -23,35 +23,48 @@ class MarkdownParser:
         return MarkdownParser.re_s.sub(' ', temp).strip()
 
     @staticmethod
-    def unmarkdown(input_text: list, main_heading: str) -> next:
+    def unmarkdown(input_text: list, page_headings: list, product: str) -> next:
         """
     Converts markdown to headings and text. No nesting
+        :param product: Name of the WSO2 Product to which the content belongs to
         :param input_text:
-        :param main_heading:
+        :param page_headings:
         :return:
         """
-        heading_list = [main_heading]
+        headings = {0: product, 1: page_headings[-1], 2: None, 3: None, 4:None, 5:None, 6:None, 7:None}
+        hl = 1
         content = []
+
+        def generate_heading_list() -> list:
+            return [headings[0]] + page_headings[:-1] + [headings[x] for x in range(1,8) if headings[x] is not None]
 
         for line in input_text:
             # if line is heading, update heading_list appropriately
             h = MarkdownParser.re_h.findall(line)
+            # check if headings found
             if len(h) > 0:
+                # yield current content and headings if exists
                 if len(content) > 0:
-                    yield heading_list, content
+                    yield generate_heading_list(), content
                     content = []
+                # get first result from h
                 h = h.pop()
                 l, t = (len(h[0]), h[1])
                 # truncate heading_list if current heading level is lower
-                if len(heading_list) >= l:
-                    heading_list = heading_list[:l - 1]
-                heading_list.append(MarkdownParser.__strip_markdown_tags(t))
+                if hl >= l:
+                    # clear heading details below current level
+                    for x in range(l+1, hl+1):
+                        headings[x] = None
+                    # update current heading level
+                    hl = l
+                # update current heading
+                headings[l] = MarkdownParser.__strip_markdown_tags(t)
             # if not, parse markdown text as plain text and return with heading hierarchy
             else:
                 content.append(MarkdownParser.__strip_markdown_tags(line))
         # yield final content if any exists
         if len(content) > 0:
-            yield heading_list, content
+            yield generate_heading_list(), content
 
     @staticmethod
     def unmarkdown_nested(text: list, heading: str, current_level: int):

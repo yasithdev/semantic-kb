@@ -18,8 +18,8 @@ def run_test():
 
         answers = msgEngine.process_and_answer(message)
         print('A > ')
-        for heading, content in answers:
-            print('\033[1m' + heading + '\033[0m' + '\n' + content)
+        for heading, score, answer in answers:
+            print('\033[1m%s (%f)\033[0m\n%s' % (heading, score, answer))
 
 if __name__ == '__main__':
     try:

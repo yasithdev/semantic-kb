@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from core.api import (MongoAPI, PostgresAPI)
@@ -12,7 +13,8 @@ def populate_kb(headings: list, sentences: list, postgres_api: PostgresAPI, mong
     # insert the sentences using that heading id
     for sentence in sentences:
         for parametrized_sentence, entity_normalization in TextParser.parametrize_text(sentence):
-            postgres_api.insert_sentence(parametrized_sentence, entity_normalization, heading_id)
+            if len(parametrized_sentence) >= 5:
+                postgres_api.insert_sentence(parametrized_sentence, entity_normalization, heading_id)
 
 
 def run_test(postgres_api: PostgresAPI, mongo_api: MongoAPI):
@@ -24,8 +26,9 @@ def run_test(postgres_api: PostgresAPI, mongo_api: MongoAPI):
     with StanfordServer():
         for i, data in enumerate(training_data):
             # Iterate through each sentence of the contents and populate KB
-            print('URL: %s' % data['_id'], flush=True)
-            for heading, sentences in MarkdownParser.unmarkdown(data['content'], data['heading']):
+            product = re.findall(r'/display/(.+?)(?=/|$)', data['_id'])[0]
+            print('Product: %s \t| URL: %s' % (product, data['_id']), flush=True)
+            for heading, sentences in MarkdownParser.unmarkdown(data['content'], data['heading'], product):
                 # sentence tokenize and flatten the sentences
                 flattened_sentences = []
                 for sentence in sentences:

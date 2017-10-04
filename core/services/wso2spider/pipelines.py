@@ -49,7 +49,7 @@ class Wso2SpiderPipeline(object):
             return {
                 '_id': item['_id'],
                 'title': filtered_title,
-                'heading': filtered_heading,
+                'heading': item['hierarchy'] + [filtered_heading],
                 'content': filtered_content
             }
         else:

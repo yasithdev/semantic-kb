@@ -9,6 +9,10 @@ from core.api import StanfordAPI
 
 MAX_LEAF_LENGTH = 25
 MAX_ENTITY_LENGTH = 100
+RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9\s]')
+RE_SPACES = re.compile(r'\s+')
+RE_ACRONYM_PLURAL = re.compile(r'(?<=[A-Z])s$')
+RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
 
 def parametrize_entity(entity: str) -> str:
     return '[%s(@E)]' % entity
@@ -22,17 +26,22 @@ Normalize the entity into **lowercase**, **singular** form
     :rtype: str
     """
     lemmatizer = WordNetLemmatizer()
-    # convert entity to lowercase
-    entity = entity.lower()
-    entity = re.sub(r'[^A-Za-z0-9]', '', entity)
+    # remove plurals from acronyms
+    entity = RE_ACRONYM_PLURAL.sub('', entity)
+    # remove all non-alphanumeric/space characters
+    entity = RE_NON_ALNUM_SPACE.sub(' ', entity)
+    # remove extra spaces, strip, and lowercase
+    entity = RE_SPACES.sub(' ', entity).strip().lower()
     # get rightmost word
-    matches = re.findall(r'(?<=[\\\s\-:/])(\w+)$', entity)
-    if len(matches) == 0:
-        return lemmatizer.lemmatize(entity)
+    rightmost_word = RE_RIGHTMOST_WORD.findall(entity)
+    # lemmatize and return entity if no rightmost words found
+    if len(rightmost_word) == 0:
+        return RE_SPACES.sub('', lemmatizer.lemmatize(entity))
+    # lemmatize the rightmost word and return new entity
     else:
-        rightmost_word = matches[-1]
+        rightmost_word = rightmost_word[-1]
         lem_word = lemmatizer.lemmatize(rightmost_word)
-        return entity.replace(rightmost_word, lem_word).replace(' ', '')
+        return RE_SPACES.sub('', entity.replace(rightmost_word, lem_word))
 
 
 def parametrize_and_normalize_tree(tree: Tree, max_leaf_length: int = MAX_LEAF_LENGTH, max_entity_length: int = MAX_ENTITY_LENGTH) -> tuple:
@@ -83,7 +92,7 @@ of the entities in a dict
                             if max_entity_length >= len(entity) > 1 and float(len(entity) - len(re.findall(r'[^A-Za-z0-9\s]', entity)))/len(entity) > 0.5:
                                 # Replace the original entity(ies) with entity wrapper
                                 phrase = phrase.replace(entity, parametrize_entity(entity))
-                                entity_normalization[entity] = normalize_entity(entity)
+                                entity_normalization[normalize_entity(entity)] = entity
                 parametrized_sentence = ' '.join([parametrized_sentence, phrase]).replace(" 's", "'s")
     return parametrized_sentence, entity_normalization
 
@@ -170,15 +179,16 @@ Named Entity tags are replace with the keyword ENTITY (if preserve_entities = Fa
     return entity_sanitized_sent
 
 
-def sent_tokenize(input: str) -> list:
+def sent_tokenize(input_string: str) -> list:
     """
 Accepts a string containing *multiple* sentences, and return a list of sentences.
-    :param input: string containing multiple sentences
+    :param input_string: string containing multiple sentences
     :return: list of sentences
     :rtype: list
     """
-    return [x.strip() for x in re.split(r"(?<=[a-zA-Z])[!.?;:]\s*(?=[A-Z])", input)
+    output = [x.strip() for x in re.split(r"(?<=[a-zA-Z])([!.?;:]\s*)(?=[A-Z])", input_string)
             if x.strip() != '' and not len(x.strip()) < 2]
+    return output
 
 
 def word_tokenize(input: str) -> list:
