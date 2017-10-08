@@ -1,6 +1,7 @@
 import pg8000 as psql
 
-ERROR_TOLERANCE = 3
+ERROR_TOLERANCE = 5
+MAX_ENTITY_LENGTH = 50
 
 
 class PostgresAPI:
@@ -144,7 +145,7 @@ class PostgresAPI:
     def insert_heading(self, heading: str, parent_id: int = None) -> int:
         # Insert one heading along with its parent_id, and return the new heading_id
         self.cursor.execute('''
-            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%s, COALESCE(%s,1))
+            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%S, COALESCE(%s,1))
             ON CONFLICT(heading, parent_id) 
             DO UPDATE SET heading = EXCLUDED.heading, parent_id = EXCLUDED.parent_id
             RETURNING heading_id''',
@@ -162,7 +163,7 @@ class PostgresAPI:
     def insert_sentence(self, sentence: str, entity_normalization: dict, heading_id: int = None) -> int:
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%s, %s) RETURNING sentence_id''',
+            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%S, %S) RETURNING sentence_id''',
                             [sentence, heading_id]
                             )
         sentence_id = self.cursor.fetchone()[0]
@@ -173,14 +174,14 @@ class PostgresAPI:
             if len(entity) >= 100:
                 continue
             self.cursor.execute('''
-                INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
+                INSERT INTO semantic_kb.entities (entity) VALUES (%S) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
                 RETURNING entity_id''', [entity])
             entity_id = self.cursor.fetchall()[0][0]
             # Insert normalization record to map normalization -> original string
             self.cursor.execute('''
                 INSERT INTO semantic_kb.normalizations(sentence_id, entity_id, raw_entity) VALUES 
-                (%s, %s, %s)''', [sentence_id, entity_id, entity])
+                (%S, %S, %S)''', [sentence_id, entity_id, entity])
         self.conn.commit()
         print('.', end='', flush=True)
         return int(sentence_id)
@@ -188,12 +189,12 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%S, %S)''', [sentence_id, frame])
         self.conn.commit()
 
     def get_heading_hierarchy(self, heading_id: int) -> list:
-        self.cursor.execute('''SELECT heading_id, heading, index from semantic_kb.get_hierarchy(%s)'''
-        , [heading_id])
+        self.cursor.execute('''SELECT heading_id, heading, index FROM semantic_kb.get_hierarchy(%S)'''
+                            , [heading_id])
         return self.cursor.fetchall()
 
     def get_sentences_by_id(self, sentence_ids: list) -> next:
@@ -219,40 +220,34 @@ class PostgresAPI:
         return self.cursor.fetchall()
 
     def query_sentence_ids(self, entities: set, frames: set) -> set:
-        # Get the entity ids of the entities matching the input entities
+
+        # Get the entity ids of all entities matching the input entities
         def get_matching_entity_ids(input_entities: set) -> set:
-            matches = []
+            matching_entity_ids = set()
             for entity in input_entities:
+                # execute direct string match
                 self.cursor.execute('''
-                    SELECT DISTINCT entity_id, length(entity) from semantic_kb.entities WHERE length(entity) < 50
-                    AND length(entity) >= length('{0}')
+                    SELECT DISTINCT 
+                      entity_id, 
+                      length(entity) entity_length,
+                      semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) edit_distance
+                    FROM 
+                      semantic_kb.entities
+                    WHERE
+                      length(entity) < {2}
+                    AND 
+                      length(entity) >= length('{0}')
                     AND (
                       entity LIKE '{0}%%' 
                       OR entity LIKE '%%{0}' 
-                      OR semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) <= {1}
+                      OR semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) < {1}
                     ) 
-                    ORDER BY length(entity) LIMIT 5
-                    '''.format(entity, ERROR_TOLERANCE))
-                matches += [set([int(result[0]) for result in self.cursor.fetchall()])]
-            # sort matches in ascending order of match lengths, and get the intersection
-            matches = sorted(matches, key=len, reverse=True)
-            r = set()
-            critical_matches = []
-            # linearly enumerate and generate minimum result set
-            for x, e in enumerate(matches):
-                if x == 0:
-                    r = e
-                    continue
-                # try to assign intersection. if failed, add the results as critical matches
-                isc = r.intersection(e)
-                if len(isc) == 0:
-                    critical_matches += e
-                else:
-                    r = isc
-
-            # TODO In critical matches, get the most occurring matches and union them with r and return
-            isc = r.intersection(critical_matches)
-            return isc if len(isc) != 0 else r.union(critical_matches)
+                    ORDER BY entity_length ASC, edit_distance ASC LIMIT 3
+                    '''.format(entity, ERROR_TOLERANCE, MAX_ENTITY_LENGTH))
+                # get set of results and append to matching_entity_ids set
+                matches = set([int(result[0]) for result in self.cursor.fetchall()])
+                matching_entity_ids = matching_entity_ids.union(matches)
+            return matching_entity_ids
 
         # Get the sentence ids of the sentences containing the passed entity ids
         def get_entity_matching_sent_ids(input_entity_ids: set) -> set:
@@ -263,35 +258,39 @@ class PostgresAPI:
                                 WHERE entity_id IN ({0})'''.format(entity_param))
             return set([int(result[0]) for result in self.cursor.fetchall()])
 
-        # Get the sentence ids of the sentences matching the input frames
-        def get_frame_matching_sent_ids(input_frames: set) -> set:
-            if len(input_frames) == 0:
+        # Get the sentence ids of the entity-matching sentences that match the input frames
+        def filter_sent_ids_by_frames(sent_ids: set, input_frames: set) -> set:
+            if len(sent_ids) == 0 or len(input_frames) == 0:
                 return set([])
             else:
-                frame_param = str(input_frames).replace('{', '').replace('}', '')
+                sent_param = str(sent_ids)[1:-1]
+                frame_param = str(input_frames)[1:-1]
                 self.cursor.execute('''
-                    SELECT DISTINCT sentence_id from semantic_kb.frames WHERE frame IN ({0})'''.format(frame_param))
+                    SELECT DISTINCT 
+                      sentence_id 
+                    FROM 
+                      semantic_kb.frames 
+                    WHERE 
+                      sentence_id IN ({0})
+                    AND
+                      frame IN ({1})'''.format(sent_param, frame_param))
                 return set([int(result[0]) for result in self.cursor.fetchall()])
 
         # Actual query computation logic starts here
         entity_ids = get_matching_entity_ids(entities)
         entity_matching_sent_ids = get_entity_matching_sent_ids(entity_ids)
-        frame_matching_sent_ids = get_frame_matching_sent_ids(frames)
+        frame_filtered_sent_ids = filter_sent_ids_by_frames(entity_matching_sent_ids, frames)
 
         # Print the loaded variables
         print('# Entity Ids: %s' % len(entity_ids))
         print('# Entity-Matching sentence Ids: %s' % len(entity_matching_sent_ids))
-        print('# Frame-Matching sentence Ids: %s' % len(frame_matching_sent_ids))
+        print('# Frame-Filtered sentence Ids: %s' % len(frame_filtered_sent_ids))
 
-        # TODO Check if the logic can be made better
-        sent_ids_intersection = entity_matching_sent_ids.intersection(frame_matching_sent_ids)
-
-        # Using the matching sentence ids, return the sentences in order of their Ids
-        if len(sent_ids_intersection) > 0:
-            # Option 1 - Intersection Exists. Gives most relevant results
-            return sent_ids_intersection
+        if len(frame_filtered_sent_ids) > 0:
+            # Option 1 - Frame filter returns sentences. Gives most relevant results
+            return frame_filtered_sent_ids
         elif len(entity_matching_sent_ids) > 0:
-            # Option 2 - No intersection. Gives results relevant to entity
+            # Option 2 - Frame filter returns no sentences. Gives results relevant to entity
             return entity_matching_sent_ids
         else:
             # Option 3 - No entity matching sentences. Return no results
