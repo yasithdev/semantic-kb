@@ -1,15 +1,14 @@
-from core.parsers import common
+from nltk import Tree, breadth_first
 
 
 class MessageParser:
     @staticmethod
-    def sent_tokenize_pos_tag_and_calculate_score(input_text: str, include_entity_names: bool = True) -> next:
+    def calculate_score(parsed_string: str) -> next:
         """
     Get an input text, break into sentences, pos-tag the sentence, and calculate a question score indicating how likely
     the sentence is a question
-        :param include_entity_names: (optional) default is True. If set to false, entities will be replaced as ENTITY
-        :param input_text: input text
-        :return: a generator of tuples in the format **(sentence, pos_tagged tokens, question_score)**
+        :param parsed_string: input text
+        :return: a float value between 0 an 1
         """
 
         def get_score(wh: bool, md: bool, qmark: bool) -> float:
@@ -18,17 +17,22 @@ class MessageParser:
         qmark_tag = False
         wh_tag = False
         md_tag = False
+        score = 0
 
-        if '?' in input_text: qmark_tag = True
-        input_text = common.sanitize(input_text, preserve_entities=include_entity_names)
-        input_sentences = common.sent_tokenize(input_text)
+        if '?' in parsed_string: qmark_tag = True
 
-        for sentence in input_sentences:
-            pos_tagged_tokens = common.pos_tag(sentence)
-            # Check if the tokens in a sentence belong to a question or a statement
-            for token in pos_tagged_tokens:
-                if token[1][0] == 'W':
+        tree = Tree.fromstring(parsed_string)
+        i = 0
+        for node in breadth_first(tree):
+            if isinstance(node, Tree):
+                i += 1
+                # Check if the tokens in a sentence belong to a question or a statement
+                t = node.label()
+                if t[0] == 'W':
                     wh_tag = True
-                if token[1][0] == 'M':
+                if t[0] == 'M':
                     md_tag = True
-            yield (str(sentence), pos_tagged_tokens, get_score(wh_tag, md_tag, qmark_tag))
+                score += get_score(wh_tag, md_tag, qmark_tag)
+            else:
+                break
+        return (score / i) if i > 0 else 0

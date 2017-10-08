@@ -7,7 +7,7 @@ MAX_ENTITY_LENGTH = 50
 class PostgresAPI:
     def __init__(self, debug: bool = False) -> None:
         super().__init__()
-        self.conn = psql.connect(user="postgres", password="1234", database="postgres")
+        self.conn = psql.connect(user="postgres", password="1234", database="semantic_kb")
         self.cursor = self.conn.cursor()
         # initial configuration
         if debug:
@@ -49,8 +49,7 @@ class PostgresAPI:
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS semantic_kb.normalizations (
               sentence_id SERIAL,
-              entity_id SERIAL,
-              raw_entity TEXT NOT NULL
+              entity_id SERIAL
               )''')
 
         # Create Table for Frames
@@ -145,7 +144,7 @@ class PostgresAPI:
     def insert_heading(self, heading: str, parent_id: int = None) -> int:
         # Insert one heading along with its parent_id, and return the new heading_id
         self.cursor.execute('''
-            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%S, COALESCE(%s,1))
+            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%s, COALESCE(%s,1))
             ON CONFLICT(heading, parent_id) 
             DO UPDATE SET heading = EXCLUDED.heading, parent_id = EXCLUDED.parent_id
             RETURNING heading_id''',
@@ -160,28 +159,28 @@ class PostgresAPI:
             current_parent = self.insert_heading(heading, current_parent)
         return int(current_parent)
 
-    def insert_sentence(self, sentence: str, entity_normalization: dict, heading_id: int = None) -> int:
+    def insert_sentence(self, sentence: str, normalized_entities: set, heading_id: int = None) -> int:
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%S, %S) RETURNING sentence_id''',
+            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%s, %s) RETURNING sentence_id''',
                             [sentence, heading_id]
                             )
         sentence_id = self.cursor.fetchone()[0]
 
         # Insert normalized entities into database, along with the normalization
-        for entity in entity_normalization.keys():
+        for entity in normalized_entities:
             # ignore long entities (probably codes)
             if len(entity) >= 100:
                 continue
             self.cursor.execute('''
-                INSERT INTO semantic_kb.entities (entity) VALUES (%S) 
+                INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
                 RETURNING entity_id''', [entity])
             entity_id = self.cursor.fetchall()[0][0]
             # Insert normalization record to map normalization -> original string
             self.cursor.execute('''
-                INSERT INTO semantic_kb.normalizations(sentence_id, entity_id, raw_entity) VALUES 
-                (%S, %S, %S)''', [sentence_id, entity_id, entity])
+                INSERT INTO semantic_kb.normalizations(sentence_id, entity_id) VALUES 
+                (%s, %s)''', [sentence_id, entity_id])
         self.conn.commit()
         print('.', end='', flush=True)
         return int(sentence_id)
@@ -189,11 +188,11 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%S, %S)''', [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
         self.conn.commit()
 
     def get_heading_hierarchy(self, heading_id: int) -> list:
-        self.cursor.execute('''SELECT heading_id, heading, index FROM semantic_kb.get_hierarchy(%S)'''
+        self.cursor.execute('''SELECT heading_id, heading, index FROM semantic_kb.get_hierarchy(%s)'''
                             , [heading_id])
         return self.cursor.fetchall()
 

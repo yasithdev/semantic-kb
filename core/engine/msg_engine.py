@@ -5,7 +5,6 @@ from core.parsers import (MessageParser as _MessageParser, TextParser as _TextPa
 
 
 class MessageEngine:
-
     MAX_SENT_PER_GRP = 3
     MAX_GRP_PER_ANS = 5
     ACCEPT_RATIO = 0.75
@@ -35,11 +34,10 @@ class MessageEngine:
         for _heading in headings:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
-            _entities = set(
-                e
-                for ps, ent in self.txt_parser.parametrize_text(_heading)
-                for e in dict.keys(ent)
-            )
+            _entities = set()
+            for parsed_string in self.txt_parser.get_parsed_strings(_heading):
+                for normalized_entities in self.txt_parser.extract_normalized_entities(parsed_string):
+                    _entities = _entities.union([normalized_entities])
             # add entities and content length to heading_entities as LIFO
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
             yield (_heading, _content_length, _entities)
@@ -93,40 +91,37 @@ class MessageEngine:
         # if no results come up, return this
         default_fallback = 'Sorry, I do not know the answer for that.'
 
-        # get a list of tuples in the form (sentence, tokens, score) for the input message content
-        for q_sentence, tokens, q_score in self.msg_parser.sent_tokenize_pos_tag_and_calculate_score(input_q):
+        # generate parse strings from input text
+        for parsed_string in self.txt_parser.get_parsed_strings(input_q):
 
-            # get the parametrized sentences, dictionary of entities, and its frames
-            for parametrized_q_sentence, q_entity_dict in self.txt_parser.parametrize_text(q_sentence):
+            # get entities frames, and question score from sentence
+            q_entities = self.txt_parser.extract_normalized_entities(parsed_string)
+            q_frames = self.txt_parser.get_frames(parsed_string, search_entities=True)
+            q_score = self.msg_parser.calculate_score(parsed_string)
 
-                # get entities and frames from sentence
-                q_entities = set(dict.keys(q_entity_dict))
-                q_frames = self.txt_parser.get_frames(parametrized_q_sentence)
+            # query for matches in database
+            sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
 
-                # query matching sentences from database
-                sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
+            # if no matches found, return the default fallback
+            if len(sent_id_matches) == 0:
+                yield (None, 0, default_fallback)
 
-                # Condition 1 - No matches returned. Return default fallback
-                if len(sent_id_matches) == 0:
-                    yield (None, 0, default_fallback)
+            else:
+                # group sets of sentences under headings, and sort by descending order of heading score
+                scored_matches = []
+                for heading_string, sentence_ids in self.api.group_sentences_by_heading(sent_id_matches):
+                    match = (
+                        heading_string,
+                        self.__get_heading_score(heading_string, q_entities),
+                        self.__merge_adjacent_sent_ids(sentence_ids)
+                    )
+                    scored_matches += [match]
+                scored_matches.sort(key=lambda item: item[1], reverse=True)
 
-                # Condition 2 - Has sentence matches. Group them under sentence ids and return them
-                else:
-                    # group sets of sentences under headings, and sort by descending order of heading score
-                    scored_matches = []
-                    for heading_string, sentence_ids in self.api.group_sentences_by_heading(sent_id_matches):
-                        match = (
-                            heading_string,
-                            self.__get_heading_score(heading_string, q_entities),
-                            self.__merge_adjacent_sent_ids(sentence_ids)
-                        )
-                        scored_matches += [match]
-                    scored_matches.sort(key=lambda item: item[1], reverse=True)
-
-                    # Merge nearby sentences and yield merged_matches
-                    for (heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
-                        answers = [
-                            common.sanitize(sentence, preserve_entities=True)
-                            for sent_id, sentence in self.api.get_sentences_by_id(s_ids)
-                        ]
-                        yield (heading, h_score, str('. '.join(answers) + '.'))
+                # Merge nearby sentences and yield merged_matches
+                for (heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
+                    answers = [
+                        common.extract_sentence(sentence, preserve_entities=True)
+                        for sent_id, sentence in self.api.get_sentences_by_id(s_ids)
+                    ]
+                    yield (heading, h_score, str('. '.join(answers) + '.'))

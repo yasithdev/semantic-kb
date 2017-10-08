@@ -1,10 +1,32 @@
+import re
 from difflib import SequenceMatcher
 
-from nltk import (RegexpParser)
+from nltk import (RegexpParser, Tree)
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
-import re
+
 from core.parsers import common
+
+GRAMMAR = '''           
+# Adjectives (Composite)
+CA: { <JJR><VB.*>|<RB>?<JJ> }
+
+# Adjectives
+AJ: { <CA>(<CC>?<CA>)* }
+
+# Entities
+EN: {<AJ>?<NN.*>+}
+{<AJ>?<FW>+}
+{<AJ|NN><VBG>+<NN.*>?}
+
+# Noun-phrases
+NP: {<DT>?<CC>?(<CC><CD>)*<EN>(<CC>?<EN>)*}
+
+# Rest should be considered as a Verb-Phrase Chunk
+VP: {<.*>+}
+}<NP>+{
+'''
+PARSER = RegexpParser(GRAMMAR)
 
 
 class TextParser:
@@ -13,10 +35,10 @@ class TextParser:
         return SequenceMatcher(None, a, b).ratio()
 
     @staticmethod
-    def get_frames(input_phrase: str, verbose=False, search_entities: bool = False) -> set:
-        sanitized_phrase = common.sanitize(input_phrase, preserve_entities=search_entities)
-        print('# frame query-> %s' % re.escape(sanitized_phrase))
-        pos_tagged_tokens = common.pos_tag(sanitized_phrase, wordnet_pos=True, ignored_words=['ENTITY'])
+    def get_frames(parsed_string: str, verbose=False, search_entities: bool = False) -> set:
+        sentence = common.extract_sentence(parsed_string, preserve_entities=search_entities)
+        print('# frame query-> %s' % re.escape(sentence))
+        pos_tagged_tokens = common.pos_tag(sentence, wordnet_pos=True, ignored_words=['ENTITY'])
         lem = WordNetLemmatizer()
         results = {}
         for token in pos_tagged_tokens:
@@ -50,11 +72,6 @@ class TextParser:
                     results[lemma] = dict(results).get(lemma, 0) + 1
                 continue
 
-            # Log the results
-            if verbose:
-                print('{0!s:-<30} |{1}'.format(token, "".join(
-                    '{:-<60}|'.format(x) for x in set(('%s-==>-%s' % (lu.name, lu.frame.name) for lu in lex_units)))))
-
             # Get frame names from matched LUs and add to results
             for lexUnit in lex_units:
                 n = lexUnit.frame.name
@@ -65,46 +82,29 @@ class TextParser:
         return set(result)
 
     @staticmethod
-    def parametrize_text(input_text: str) -> next:
+    def get_parsed_strings(input_string: str) -> next:
         """
-    Break given text into sentences, extract phrases from it, and return a 2D list with lists for each sentence
-        :param input_text: text in descriptive format
-        :return: list of lists containing phrases for each sentence
+    Break given string into sentences, and return its pos-tagged strings
+        :rtype: Generator
         """
-        input_sentences = common.sent_tokenize(input_text)
+        input_sentences = common.sent_tokenize(input_string)
         for sentence in input_sentences:
-            input_tokens = common.word_tokenize(sentence)
-            pos_tagged_tokens = tuple(common.pos_tag(' '.join(input_tokens)))
-
-            # Extract phrases according to english grammar
-            grammar = '''
-            
-                # Adjectives (Composite)
-                CA: { <JJR><VB.*>|<RB>?<JJ> }
-                
-                # Adjectives
-                AJ: { <CA>(<CC>?<CA>)* }
-                
-                # Entities
-                EN: {<AJ>?<NN.*>+}
-                    {<AJ>?<FW>+}
-                    {<AJ|NN><VBG>+<NN.*>?}
-                
-                # Noun-phrases
-                NP: {<DT>?<CC>?(<CC><CD>)*<EN>(<CC>?<EN>)*}
-                
-                # Rest should be considered as a Verb-Phrase Chunk
-                VP: {<.*>+}
-                    }<NP>+{
-            '''
-            # TODO - Acronyms should be separately tagged with the Entity whenever they are found within brackets
-
-            cp = RegexpParser(grammar)
+            pos_tags = [Tree(p, list([t])) for t,p in common.pos_tag(common.generate_pos_taggable_string(sentence))]
+            pos_tagged_string = str(Tree('S', pos_tags))
             try:
-                parse_tree = cp.parse(pos_tagged_tokens)
-                # Tag the relevant entities from a parse tree and generate a parametrized sentence
-                parametrized_sentence, entity_normalization = common.parametrize_and_normalize_tree(parse_tree)
-                yield parametrized_sentence, entity_normalization
-            except Exception:
-                print(Exception)
-                input(pos_tagged_tokens)
+                tree = Tree.fromstring(pos_tagged_string)
+                tree = PARSER.parse(tree)
+                yield str(tree)
+            except ValueError as e:
+                print(e)
+                print(sentence)
+                input(pos_tags)
+
+    @staticmethod
+    def extract_normalized_entities(parsed_string: str) -> set:
+        try:
+            # extract set of normalized entities and return them
+            tree = Tree.fromstring(parsed_string)
+            return common.extract_normalized_entities(tree)
+        except Exception as e:
+            input(e.args)

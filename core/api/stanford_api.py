@@ -1,10 +1,10 @@
-from socket import (socket, gethostname)
+from socket import socket
 
 
 class StanfordAPI:
-    def __init__(self, port: int = 5000, buffer: int = 4096) -> None:
+    def __init__(self, port: int = 6000, buffer: int = 4096) -> None:
         super().__init__()
-        self.host = gethostname()
+        self.host = '127.0.0.1'
         self.port = port
         self.buffer = buffer
 

@@ -8,6 +8,7 @@ from core.services import StanfordServer
 db_api = PostgresAPI()
 msgEngine = MessageEngine(db_api)
 
+
 def run_test():
     while True:
         message = input('Q > ').strip()
@@ -21,6 +22,7 @@ def run_test():
         for heading, score, answer in answers:
             print('\033[1m%s (%f)\033[0m\n%s' % (heading, score, answer))
 
+
 if __name__ == '__main__':
     try:
         # Assume Stanford Server is running, and try test
@@ -30,4 +32,3 @@ if __name__ == '__main__':
         # Initialize Stanford Server and try test
         with StanfordServer():
             run_test()
-
