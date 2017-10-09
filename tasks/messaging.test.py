@@ -19,8 +19,8 @@ def run_test():
 
         answers = msgEngine.process_and_answer(message)
         print('A > ')
-        for heading, score, answer in answers:
-            print('\033[1m%s (%f)\033[0m\n%s' % (heading, score, answer))
+        for heading, url, score, answer in answers:
+            print('\033[1m%s (%f) \n%s \033[0m\n%s' % (heading, url, score, answer))
 
 
 if __name__ == '__main__':

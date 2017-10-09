@@ -31,12 +31,12 @@ class MarkdownParser:
         :param page_headings:
         :return:
         """
-        headings = {0: product, 1: page_headings[-1], 2: None, 3: None, 4:None, 5:None, 6:None, 7:None}
+        h_dict = {0: product, 1: page_headings[-1], 2: None, 3: None, 4: None, 5: None, 6: None, 7: None}
         hl = 1
         content = []
 
         def generate_heading_list() -> list:
-            return [headings[0]] + page_headings[:-1] + [headings[x] for x in range(1,8) if headings[x] is not None]
+            return [h_dict[0]] + page_headings[:-1] + [h_dict[n] for n in range(1, 8) if h_dict[n] is not None]
 
         for line in input_text:
             # if line is heading, update heading_list appropriately
@@ -53,12 +53,12 @@ class MarkdownParser:
                 # truncate heading_list if current heading level is lower
                 if hl >= l:
                     # clear heading details below current level
-                    for x in range(l+1, hl+1):
-                        headings[x] = None
+                    for x in range(l + 1, hl + 1):
+                        h_dict[x] = None
                     # update current heading level
                     hl = l
                 # update current heading
-                headings[l] = MarkdownParser.__strip_markdown_tags(t)
+                h_dict[l] = MarkdownParser.__strip_markdown_tags(t)
             # if not, parse markdown text as plain text and return with heading hierarchy
             else:
                 content.append(MarkdownParser.__strip_markdown_tags(line))
@@ -84,7 +84,7 @@ class MarkdownParser:
                 l, t = (len(h[0]), h[1])
 
                 if l > current_level:
-                    MarkdownParser.unmarkdown_nested(text[i+1:], t, l)
+                    MarkdownParser.unmarkdown_nested(text[i + 1:], t, l)
                 else:
                     return heading, content
 
@@ -101,5 +101,3 @@ class MarkdownParser:
         # yield final content if any exists
         if len(content) > 0:
             yield heading_list, content
-
-

@@ -1,9 +1,19 @@
+import json
+
 from flask import (Flask, request, render_template)
 
 import config
 from core.api import accepts_json, PostgresAPI
-from core.parsers import TextParser
+from core.engine.msg_engine import MessageEngine
+from core.parsers import (TextParser, common)
 from core.services import StanfordServer
+
+API_COMMANDS = [
+    {'url': '/', 'request': 'GET', 'function': 'This Page'},
+    {'url': '/content', 'request': 'GET', 'function': 'Ask Question'},
+    {'url': '/content', 'request': 'POST', 'function': 'Add Content to KB'},
+    {'url': '/display', 'request': 'GET', 'function': 'Display KB Content'},
+]
 
 
 class App:
@@ -13,31 +23,47 @@ class App:
         self.app.config['SECRET_KEY'] = config.saml['secret_key']
         self.app.config['SAML_PATH'] = config.saml['saml_path']
         self.postgres_api = PostgresAPI(debug)
+        self.message_engine = MessageEngine(self.postgres_api)
 
-        @self.app.route('/')
-        def home():
-            return render_template('home.html', commands=[
-                {'url': '/content', 'request': 'GET', 'function': 'View KB content'},
-                {'url': '/learn', 'request': 'POST', 'function': 'Add Knowledge to KB'},
-                {'url': '/query', 'request': 'POST', 'function': 'Query from KB'}
-            ])
+        @self.app.route('/', methods=['GET'])
+        def home_page():
+            return render_template('home.html', commands=API_COMMANDS)
+
+        @self.app.route('/display/<int:heading_id>', methods=['GET'])
+        def view_content(heading_id: int):
+            is_json = accepts_json(request)
+            data = self.postgres_api.get_heading_content_by_id(heading_id)
+            if len(data.keys()) != 0:
+                data['content'] = '. '.join([
+                    common.extract_sentence(parse_string, True)
+                    for parse_string in data['content']
+                ])
+            if is_json:
+                return json.dumps(data)
+            else:
+                return render_template('content.html', data=data)
 
         @self.app.route('/content', methods=['GET'])
-        def content():
+        def answer_question():
             is_json = accepts_json(request)
-            intent_id = request.args.get('id')
-            scope = request.args.get('scope')
-            return str([is_json, intent_id, scope])
+            question = request.args.get('question')
+            answers = [
+                {'heading': heading, 'url': url, 'score': round(score, 2), 'answer': answer}
+                for heading, url, score, answer in self.message_engine.process_and_answer(question)
+            ] if question is not None else []
 
-        @self.app.route('/learn', methods=['POST'])
-        def learn():
+            # output the answers
+            if is_json:
+                return json.dumps({
+                    'question': question,
+                    'answers': answers
+                })
+            else:
+                return render_template('answers.html', question=question, answers=answers)
+
+        @self.app.route('/content', methods=['POST'])
+        def add_content_to_kb():
             return ""
-
-        @self.app.route('/query', methods=['POST'])
-        def query():
-            is_json = accepts_json(request)
-            intent_args = request.args.json()
-            return str([is_json, intent_args])
 
     def start(self):
         with StanfordServer():

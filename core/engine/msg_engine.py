@@ -4,6 +4,11 @@ from difflib import SequenceMatcher
 from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, common)
 
 
+def get_reference_url(h_id: int) -> str:
+    # Get the first occurring page link when traversing up the headings
+    return 'http://docs.wso2.com/display/%s' % h_id
+
+
 class MessageEngine:
     MAX_SENT_PER_GRP = 3
     MAX_GRP_PER_ANS = 5
@@ -21,12 +26,11 @@ class MessageEngine:
         # sort the matching ids
         s = sorted(s)
         # logic
-        l = len(s)
-        if l > 1:
+        if len(s) > 1:
             for i, e in enumerate(s):
-                if i + 1 < l and s[i + 1] - e <= MessageEngine.MAX_SENT_PER_GRP:
+                if i + 1 < len(s) and s[i + 1] - e <= MessageEngine.MAX_SENT_PER_GRP:
                     yield from range(s[i], s[i + 1])
-        elif l == 1:
+        elif len(s) == 1:
             yield from range(s[0], s[0] + MessageEngine.MAX_SENT_PER_GRP)
 
     def __extract_heading_entities(self, headings: list) -> next:
@@ -86,7 +90,7 @@ class MessageEngine:
     Extract the semantic meaning of a question, and produce a valid list of outputs with a relevance score
         :param input_q: input question
         :return: output answer
-        :rtype: str
+        :rtype: next
         """
         # if no results come up, return this
         default_fallback = 'Sorry, I do not know the answer for that.'
@@ -97,31 +101,33 @@ class MessageEngine:
             # get entities frames, and question score from sentence
             q_entities = self.txt_parser.extract_normalized_entities(parsed_string)
             q_frames = self.txt_parser.get_frames(parsed_string, search_entities=True)
-            q_score = self.msg_parser.calculate_score(parsed_string)
+            # q_score = self.msg_parser.calculate_score(parsed_string)
 
             # query for matches in database
             sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
 
             # if no matches found, return the default fallback
             if len(sent_id_matches) == 0:
-                yield (None, 0, default_fallback)
+                yield (None, '', 0, default_fallback)
 
             else:
                 # group sets of sentences under headings, and sort by descending order of heading score
                 scored_matches = []
-                for heading_string, sentence_ids in self.api.group_sentences_by_heading(sent_id_matches):
+                for h_id, h_string, sentence_ids in self.api.group_sentences_by_heading(sent_id_matches):
                     match = (
-                        heading_string,
-                        self.__get_heading_score(heading_string, q_entities),
+                        h_id,
+                        h_string,
+                        self.__get_heading_score(h_string, q_entities),
                         self.__merge_adjacent_sent_ids(sentence_ids)
                     )
                     scored_matches += [match]
-                scored_matches.sort(key=lambda item: item[1], reverse=True)
+                scored_matches.sort(key=lambda item: item[2], reverse=True)
 
                 # Merge nearby sentences and yield merged_matches
-                for (heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
+                for (h_id, heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
                     answers = [
                         common.extract_sentence(sentence, preserve_entities=True)
-                        for sent_id, sentence in self.api.get_sentences_by_id(s_ids)
+                        for index, (sent_id, sentence) in enumerate(self.api.get_sentences_by_id(s_ids))
+                        if index < MessageEngine.MAX_SENT_PER_GRP
                     ]
-                    yield (heading, h_score, str('. '.join(answers) + '.'))
+                    yield (heading, get_reference_url(h_id), h_score, str('. '.join(answers) + '.'))

@@ -89,7 +89,7 @@ class TextParser:
         """
         input_sentences = common.sent_tokenize(input_string)
         for sentence in input_sentences:
-            pos_tags = [Tree(p, list([t])) for t,p in common.pos_tag(common.generate_pos_taggable_string(sentence))]
+            pos_tags = [Tree(p, list([t])) for t, p in common.pos_tag(common.generate_pos_taggable_string(sentence))]
             pos_tagged_string = str(Tree('S', pos_tags))
             try:
                 tree = Tree.fromstring(pos_tagged_string)

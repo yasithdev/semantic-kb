@@ -2,6 +2,7 @@ import pg8000 as psql
 
 ERROR_TOLERANCE = 5
 MAX_ENTITY_LENGTH = 50
+ROOT_NODE_NAME = 'ROOT'
 
 
 class PostgresAPI:
@@ -37,7 +38,6 @@ class PostgresAPI:
             )''')
 
         # Create Table for Sentence Templates
-        # TODO Maintain UNIQUE for sentence and heading_id. Cannot do it atm since headings are not set
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS semantic_kb.sentences (
               sentence_id SERIAL PRIMARY KEY,
@@ -63,8 +63,10 @@ class PostgresAPI:
         cursor.execute('''CREATE EXTENSION fuzzystrmatch WITH SCHEMA semantic_kb''')
 
         # Add ROOT Record for Headings. Every heading maps to this (To avoid foreign key violations)
-        # TODO try a better approach
-        cursor.execute('''INSERT INTO semantic_kb.headings (heading, parent_id) VALUES ('ROOT', NULL)''')
+        cursor.execute('''
+          INSERT INTO semantic_kb.headings (heading, parent_id) 
+          VALUES (%s, NULL)''' % repr(ROOT_NODE_NAME)
+                       )
 
         # Add Function to get heading hierarchy
         cursor.execute('''
@@ -123,7 +125,7 @@ class PostgresAPI:
         # Create View for observing content under each heading
         self.cursor.execute('''
             CREATE OR REPLACE VIEW semantic_kb.heading_content AS 
-            SELECT heading, string_agg(sentence, '. ') AS content FROM semantic_kb.sentences 
+            SELECT heading_id, heading, array_agg(sentences.sentence) AS content FROM semantic_kb.sentences 
             JOIN semantic_kb.headings USING(heading_id)
             GROUP BY heading_id, heading
         ''')
@@ -138,17 +140,20 @@ class PostgresAPI:
 
     def truncate_tables(self) -> None:
         self.cursor.execute('''
-            TRUNCATE semantic_kb.normalizations, semantic_kb.headings, semantic_kb.entities, semantic_kb.sentences, semantic_kb.frames, RESTART IDENTITY''')
+            TRUNCATE 
+            semantic_kb.normalizations, semantic_kb.headings, semantic_kb.entities, 
+            semantic_kb.sentences, semantic_kb.frames, 
+            RESTART IDENTITY''')
         self.conn.commit()
 
     def insert_heading(self, heading: str, parent_id: int = None) -> int:
         # Insert one heading along with its parent_id, and return the new heading_id
         self.cursor.execute('''
-            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES (%s, COALESCE(%s,1))
+            INSERT INTO semantic_kb.headings (heading, parent_id) VALUES ('%s', COALESCE(%d,1))
             ON CONFLICT(heading, parent_id) 
             DO UPDATE SET heading = EXCLUDED.heading, parent_id = EXCLUDED.parent_id
-            RETURNING heading_id''',
-                            [heading, parent_id])
+            RETURNING heading_id
+            ''' % (heading, parent_id))
         heading_id = self.cursor.fetchone()[0]
         self.conn.commit()
         return int(heading_id)
@@ -162,9 +167,8 @@ class PostgresAPI:
     def insert_sentence(self, sentence: str, normalized_entities: set, heading_id: int = None) -> int:
         # Insert parametrized sentence
         self.cursor.execute('''
-            INSERT INTO semantic_kb.sentences (sentence, heading_id) VALUES (%s, %s) RETURNING sentence_id''',
-                            [sentence, heading_id]
-                            )
+            INSERT INTO semantic_kb.sentences (sentence, heading_id) 
+            VALUES ('%s', %s) RETURNING sentence_id''' % (sentence, heading_id))
         sentence_id = self.cursor.fetchone()[0]
 
         # Insert normalized entities into database, along with the normalization
@@ -173,14 +177,15 @@ class PostgresAPI:
             if len(entity) >= 100:
                 continue
             self.cursor.execute('''
-                INSERT INTO semantic_kb.entities (entity) VALUES (%s) 
+                INSERT INTO semantic_kb.entities (entity) VALUES ('%s') 
                 ON CONFLICT (entity) DO UPDATE SET entity = EXCLUDED.entity
-                RETURNING entity_id''', [entity])
+                RETURNING entity_id
+            ''' % entity)
             entity_id = self.cursor.fetchall()[0][0]
             # Insert normalization record to map normalization -> original string
             self.cursor.execute('''
-                INSERT INTO semantic_kb.normalizations(sentence_id, entity_id) VALUES 
-                (%s, %s)''', [sentence_id, entity_id])
+                INSERT INTO semantic_kb.normalizations(sentence_id, entity_id) VALUES (%s, %s)
+                ''' % (sentence_id, entity_id))
         self.conn.commit()
         print('.', end='', flush=True)
         return int(sentence_id)
@@ -188,19 +193,24 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) VALUES (%s, %s)''', [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (sentence_id, frame) 
+                VALUES (%s, '%s')
+            ''' % (sentence_id, frame))
         self.conn.commit()
 
     def get_heading_hierarchy(self, heading_id: int) -> list:
-        self.cursor.execute('''SELECT heading_id, heading, index FROM semantic_kb.get_hierarchy(%s)'''
-                            , [heading_id])
+        self.cursor.execute('''
+            SELECT heading_id, heading, index 
+            FROM semantic_kb.get_hierarchy(%d)
+            ''' % heading_id)
         return self.cursor.fetchall()
 
     def get_sentences_by_id(self, sentence_ids: list) -> next:
-        for id in sentence_ids:
+        for sentence_id in sentence_ids:
             self.cursor.execute('''
-              SELECT DISTINCT S.sentence_id, S.sentence
-              FROM semantic_kb.sentences S WHERE S.sentence_id=%s''', [id])
+              SELECT DISTINCT sentence_id, sentence
+              FROM semantic_kb.sentences WHERE sentence_id = %d
+            ''' % sentence_id)
             # get the sentence text and return the output as a list
             result = self.cursor.fetchone()
             if result is not None:
@@ -300,10 +310,27 @@ class PostgresAPI:
             return []
         sentence_id_param = str(sentence_ids).replace('{', '').replace('}', '')
         self.cursor.execute('''
-          SELECT 
+          SELECT
+            heading_id,
             (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH 
             WHERE GH.index <= 0) heading, 
-            array_agg(sentence_id ORDER BY sentence_id ASC) sentence_ids FROM semantic_kb.sentences WHERE sentence_id IN (%s)
+            array_agg(sentence_id ORDER BY sentence_id ASC) sentence_ids FROM semantic_kb.sentences 
+            WHERE sentence_id IN (%s)
           GROUP BY heading_id
         ''' % sentence_id_param)
         return self.cursor.fetchall()
+
+    def get_heading_content_by_id(self, heading_id: int) -> dict:
+        self.cursor.execute('''
+          SELECT heading_id, heading, content FROM semantic_kb.heading_content
+          WHERE heading_id = %d
+        ''' % heading_id)
+        result = self.cursor.fetchone()
+        if result is None:
+            return {}
+        else:
+            return {
+                'heading_id': result[0],
+                'heading': result[1],
+                'content': result[2]
+            }

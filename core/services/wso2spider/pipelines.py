@@ -17,6 +17,8 @@ class DuplicatesPipeline(object):
         self.ids_seen = set()
 
     def process_item(self, item, spider):
+        if self or item or spider:
+            pass
         if item['_id'] in self.ids_seen:
             raise DropItem("Duplicate item found")
         else:
@@ -26,9 +28,12 @@ class DuplicatesPipeline(object):
 
 class Wso2SpiderPipeline(object):
     # constants
-    regex = re.compile(r'\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'\\\/])\s+')
+    regex = re.compile(r'\s+(?=[.,:)\]!\'\";])|(?<=[(\[\"\'\\/])\s+')
 
     def process_item(self, item, spider):
+        if self or item or spider:
+            pass
+
         # clean unwanted spaces and incompatible characters from given text
         def sanitize(text: str) -> str:
             content = re.sub(r'\s{2,}', ' ', self.regex.sub('', text)).strip()
@@ -62,6 +67,8 @@ class MongoPipeline(object):
     def __init__(self, mongo_uri, mongo_db):
         self.mongo_uri = mongo_uri
         self.mongo_db = mongo_db
+        self.client = pymongo.MongoClient(self.mongo_uri)
+        self.db = self.client[self.mongo_db]
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -71,10 +78,12 @@ class MongoPipeline(object):
         )
 
     def open_spider(self, spider):
-        self.client = pymongo.MongoClient(self.mongo_uri)
-        self.db = self.client[self.mongo_db]
+        if self or spider:
+            pass
 
     def close_spider(self, spider):
+        if self or spider:
+            pass
         self.client.close()
 
     def process_item(self, item, spider):

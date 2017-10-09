@@ -9,7 +9,7 @@ class WikifierAPI:
         :param include_pos_tags: Default value is True. Returns POS tagged words if set to True
         :param input_text: Text to find entities in
         :param user_key: API key for accessing wikifier
-        :return: object containing list of annotations, spaces, words and ranges, [verbs, nouns, adjectives, adverbs optional]
+        :return: object containing list of annotations, spaces, words, ranges, [optionally VB, NN, JJ, RB]
         :rtype: object
         """
         data = {

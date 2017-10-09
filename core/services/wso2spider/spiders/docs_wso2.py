@@ -11,12 +11,15 @@ from scrapy.spiders import Rule, CrawlSpider
 class DocsWso2Spider(CrawlSpider):
     name = 'docs.wso2'
     allowed_domains = ['docs.wso2.com']
-    doc_urls = ['AM210', 'ApiCloud', 'EI611', 'EIP', 'IntegrationCloud', 'IS530', 'IdentityCloud', 'DAS310', 'IOTS310',
-                'DeviceCloud']
+    doc_urls = [
+        'AM210', 'ApiCloud', 'EI611', 'EIP', 'IntegrationCloud', 'IS530', 'IdentityCloud', 'DAS310', 'IOTS310',
+        'DeviceCloud'
+    ]
     start_urls = [str('https://docs.wso2.com/display/' + p) for p in doc_urls]
     # declare xpath variables
     xpath_title = '//title//text()'
-    xpath_page_hierarchy = '//ol[@id="breadcrumbs"]//li[not(@class="first") and not(@id="ellipsis")]//text()[normalize-space()]'
+    xpath_page_hierarchy = \
+        '//ol[@id="breadcrumbs"]//li[not(@class="first") and not(@id="ellipsis")]//text()[normalize-space()]'
     xpath_h1 = '//h1[contains(@class,"with-breadcrumbs")]//text()'
     xpath_content = '//div[@class="wiki-content"]'
     # generate rules for matching the links that should be proceeded
@@ -91,12 +94,12 @@ class DocsWso2Spider(CrawlSpider):
                         continue
                     elif child.find('th') is not None:
                         continue
-                    elif child.find(attrs={'class' : 'highlight-grey confluenceTd'}) is not None:
+                    elif child.find(attrs={'class': 'highlight-grey confluenceTd'}) is not None:
                         continue
                 # [IMPORTANT] append text to output in the Markdown Syntax
-                output_string += DocsWso2Spider.markdown_format(child,
-                                                                DocsWso2Spider.extract_recursive(child, separator_tags,
-                                                                                                 ignored_classes))
+                md_format = DocsWso2Spider.markdown_format
+                ext_recursive = DocsWso2Spider.extract_recursive
+                output_string += md_format(child, ext_recursive(child, separator_tags, ignored_classes))
                 # Append newline if current tag in newline_tags list
                 if _name in separator_tags:
                     output_string += '\n'
