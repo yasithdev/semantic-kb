@@ -13,10 +13,15 @@ def run():
 
     # populate the database with sentences and entities
     with StanfordServer():
-        for i, content in enumerate(read_doc.run(mongo_api)):
-            for heading_list, flattened_sentences in content:
+        i = 0
+        for heading_list, flattened_sentences in read_doc.run(mongo_api):
+            # catch end of document
+            if heading_list is None and flattened_sentences is None:
+                i += 1
+                print('\n%d of %d completed' % (i, doc_count))
+            # insert content
+            else:
                 app.populate_kb(heading_list, flattened_sentences)
-            print('\n%d of %d completed' % (i + 1, doc_count))
 
 
 if __name__ == '__main__':

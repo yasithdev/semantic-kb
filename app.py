@@ -5,8 +5,7 @@ from flask import (Flask, request, render_template)
 import config
 from core.api import accepts_json, PostgresAPI
 from core.engine.msg_engine import MessageEngine
-from core.parsers import (TextParser, common)
-from core.services import StanfordServer
+from core.parsers import (TextParser, nlp)
 
 API_COMMANDS = [
     {'url': '/', 'request': 'GET', 'function': 'This Page'},
@@ -35,8 +34,8 @@ class App:
             data = self.postgres_api.get_heading_content_by_id(heading_id)
             if len(data.keys()) != 0:
                 data['content'] = '. '.join([
-                    common.extract_sentence(parse_string, True)
-                    for parse_string in data['content']
+                    nlp.extract_sentence(TextParser.generate_parse_tree(pos_tags), True)
+                    for pos_tags in data['content']
                 ])
             if is_json:
                 return json.dumps(data)
@@ -66,24 +65,26 @@ class App:
             return ""
 
     def start(self):
-        with StanfordServer():
+        # with StanfordServer():
             self.app.run()
 
     # Insert passed headings and sentences into KB
-    def populate_kb(self, headings: list, sections: list):
+    def populate_kb(self, headings: list, sentences: list):
         # insert all headings and get the immediate heading id
         heading_id = self.postgres_api.insert_headings(headings)
         # insert the sentences using that heading id
-        for text in sections:
-            for parsed_string in TextParser.get_parsed_strings(text):
-                normalized_entities = TextParser.extract_normalized_entities(parsed_string)
-                self.postgres_api.insert_sentence(parsed_string, normalized_entities, heading_id)
+        for sentence in sentences:
+            for pos_tags in TextParser.generate_pos_tag_sets(sentence):
+                normalized_entities = TextParser.extract_normalized_entities(pos_tags)
+                sentence = ' '.join(('%s_%s' % (token, pos) for token, pos in pos_tags))
+                # serialize the parse tree and insert into database
+                self.postgres_api.insert_sentence(sentence, normalized_entities, heading_id)
 
     # Generate frames for KB sentences to create semantics
     def generate_frames(self):
         sentence_count = self.postgres_api.get_sentence_count()
-        for index, (sentence_id, sentence) in enumerate(self.postgres_api.get_all_sentences()):
-            sent_frames = TextParser.get_frames(sentence)
+        for index, (sentence_id, sentence_pos) in enumerate(self.postgres_api.get_all_sentences()):
+            sent_frames = TextParser.get_frames(sentence_pos)
             self.postgres_api.insert_frames(sentence_id, sent_frames)
             print('%d of %d completed' % (index + 1, sentence_count))
 

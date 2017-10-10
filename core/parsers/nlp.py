@@ -1,4 +1,5 @@
 import re
+from collections import Generator
 
 from nltk import Tree
 from nltk.corpus import wordnet
@@ -57,7 +58,8 @@ Normalize the entity into **lowercase**, **singular** form
         return RE_SPACES.sub('', entity.replace(rightmost_word, lem_word))
 
 
-def __concat_valid_leaves(leaf_list):
+def __concat_valid_leaves(leaf_list: list):
+
     def validate_and_yield_entity(leaves: list) -> next:
         entity = ' '.join(leaves)
         total_len = len(entity)
@@ -78,16 +80,16 @@ def __concat_valid_leaves(leaf_list):
         yield from validate_and_yield_entity(leaf_list[si:])
 
 
-def extract_normalized_entities(tree: Tree) -> set:
+def extract_normalized_entities(parse_tree: Tree) -> set:
     """
 Accepts a **NLTK tree**, extract the entities, and return them in normalized form
 of the entities in a dict
-    :param tree: NLTK Tree
+    :param parse_tree: NLTK Tree
     :return: set of normalized entities for the tree
     :rtype: Set
     """
     normalized_entities = set()
-    for node in breadth_first(tree, maxdepth=1):
+    for node in breadth_first(parse_tree, maxdepth=1):
         # If noun phrase or verb phrase found
         # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
         # i.e. the ENT nodes are traversed after traversing all VPs and NPs
@@ -123,45 +125,35 @@ Transform **Penn-Treebank** POS tags to **Wordnet** POS Tags
         return ''
 
 
-def pos_tag(sentence: str, wordnet_pos=False, ignored_words: list = list()) -> next:
+def pos_tag(sentence: str, wordnet_pos=False) -> next:
     """
-POS-tag a sentence using Stanford pos-tagger, ignore any words mentioned in ignored_words,
-and return a list of pos_tagged tokens
+POS-tag a sentence using Stanford pos-tagger, and return a list of pos_tagged tokens
     :param sentence: the sentence to pos-tag
     :param wordnet_pos: If true, return pos-tags in wordnet-format. Default is false (returns stanford pos-tag format)
-    :param ignored_words: Any specific words to explicitly ignore when pos-tagging
-    :rtype: Generator
     """
-    pos_tagged_sentence = STANFORD_API.pos_tag(sentence)
     # yield triples depending on which pos-tag syntax is requested
-    for token, pos in pos_tagged_sentence:
-        # do not yield words in ignored_words list
-        if token in ignored_words:
-            continue
+    for token, pos in STANFORD_API.pos_tag(sentence):
         # yield wordnet pos-tag or penn-treebank pos tags depending on choice
-        yield (token, get_wordnet_pos(pos) if wordnet_pos else pos)
+        yield [token, get_wordnet_pos(pos) if wordnet_pos else pos]
 
 
-def extract_sentence(parsed_string: str, preserve_entities=False) -> str:
+def extract_sentence(parse_tree: Tree, preserve_entities=False) -> str:
     """
-Convert a sentence obtained from Semantic KB it into Frame-Extractable format.
-Named Entity tags are replace with the keyword ENTITY (if preserve_entities = False)
-    :param parsed_string: parsed sentence from Semantic KB
+Recreate and return original sentence from parse_tree. If preserve_entities set to False (default), entities
+are replaced by a placeholder to simplify sentence
+    :param parse_tree: nltk Tree
     :param preserve_entities: whether to preserve entities, or replace them with a placeholder
-    :return: sanitized string
+    :return: sentence
     """
-    # parse sentence to a tree
-    tree = Tree.fromstring(parsed_string)
-
     # concatenate all leaves and create a sentence if entities are preserved
     if preserve_entities:
-        entity_sanitized_sent = ' '.join(tree.leaves())
+        entity_sanitized_sent = ' '.join(parse_tree.leaves())
 
     # if not, replace each entity with a placeholder and create a sentence
     else:
         entity_sanitized_sent = ''
         # declare temporary variable
-        for node in breadth_first(tree, maxdepth=1):
+        for node in breadth_first(parse_tree, maxdepth=1):
             # If noun phrase or verb phrase found
             # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
             # i.e. the ENT nodes are traversed after traversing all VPs and NPs
@@ -201,27 +193,14 @@ Named Entity tags are replace with the keyword ENTITY (if preserve_entities = Fa
     return entity_sanitized_sent
 
 
-def sent_tokenize(in_str: str) -> list:
+def sent_tokenize(in_str: str) -> Generator:
     """
 Accepts a string containing *multiple* sentences, and return a list of sentences.
     :param in_str: string containing multiple sentences
     :return: list of sentences
     :rtype: list
     """
-    return [
+    return (
         x.strip() for x in RE_SENT_TOKENIZE.findall(in_str)
         if x.strip() != '' and not len(x.strip()) < MIN_SENT_LENGTH
-    ]
-
-
-def generate_pos_taggable_string(in_str: str) -> str:
-    """
-Accepts a string containing a *single* sentence, and return a string with spaces corrected
-    :param in_str: sentence string
-    :return: string with pos-tag-friendly spacings
-    :rtype: str
-    """
-    return ' '.join([
-        x.strip() for x in RE_WORD_TOKENIZE.split(in_str)
-        if x.strip() != ''
-    ])
+    )

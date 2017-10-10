@@ -1,7 +1,9 @@
 import re
 
 from core.api import MongoAPI
-from core.parsers import (MarkdownParser, common)
+from core.parsers import (MarkdownParser, nlp)
+
+RE_PRODUCT = re.compile(r'/display/(.+?)(?=/|$)')
 
 
 def run(mongo_api: MongoAPI):
@@ -10,11 +12,7 @@ def run(mongo_api: MongoAPI):
 
     for i, data in enumerate(training_data):
         # Iterate through each sentence of the contents and populate KB
-        product = re.findall(r'/display/(.+?)(?=/|$)', data['_id'])[0]
-        parsed_doc = []
+        product = RE_PRODUCT.findall(data['_id'])[0]
         for heading_list, sentences in MarkdownParser.unmarkdown(data['content'], data['heading'], product):
-            flattened_sentences = []
-            for sentence in sentences:
-                flattened_sentences.extend(common.sent_tokenize(sentence))
-            parsed_doc.append((heading_list, flattened_sentences))
-        yield parsed_doc
+            yield (heading_list, (sent for sents in sentences for sent in nlp.sent_tokenize(sents)))
+        yield (None, None)

@@ -1,7 +1,7 @@
 import re
 from difflib import SequenceMatcher
 
-from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, common)
+from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, nlp)
 
 
 def get_reference_url(h_id: int) -> str:
@@ -18,7 +18,6 @@ class MessageEngine:
     def __init__(self, api) -> None:
         super().__init__()
         self.msg_parser = _MessageParser()
-        self.txt_parser = _TextParser()
         self.api = api
 
     @staticmethod
@@ -39,8 +38,8 @@ class MessageEngine:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
             _entities = set()
-            for parsed_string in self.txt_parser.get_parsed_strings(_heading):
-                for normalized_entities in self.txt_parser.extract_normalized_entities(parsed_string):
+            for pos_tags in _TextParser.generate_pos_tag_sets(_heading):
+                for normalized_entities in _TextParser.extract_normalized_entities(pos_tags):
                     _entities = _entities.union([normalized_entities])
             # add entities and content length to heading_entities as LIFO
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
@@ -95,12 +94,11 @@ class MessageEngine:
         # if no results come up, return this
         default_fallback = 'Sorry, I do not know the answer for that.'
 
-        # generate parse strings from input text
-        for parsed_string in self.txt_parser.get_parsed_strings(input_q):
-
+        # generate parse trees from input text
+        for pos_tags in _TextParser.generate_pos_tag_sets(input_q):
             # get entities frames, and question score from sentence
-            q_entities = self.txt_parser.extract_normalized_entities(parsed_string)
-            q_frames = self.txt_parser.get_frames(parsed_string, search_entities=True)
+            q_entities = _TextParser.extract_normalized_entities(pos_tags)
+            q_frames = _TextParser.get_frames(pos_tags)
             # q_score = self.msg_parser.calculate_score(parsed_string)
 
             # query for matches in database
@@ -126,8 +124,8 @@ class MessageEngine:
                 # Merge nearby sentences and yield merged_matches
                 for (h_id, heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
                     answers = [
-                        common.extract_sentence(sentence, preserve_entities=True)
-                        for index, (sent_id, sentence) in enumerate(self.api.get_sentences_by_id(s_ids))
+                        nlp.extract_sentence(_TextParser.generate_parse_tree(pos_tags), preserve_entities=True)
+                        for index, (sent_id, pos_tags) in enumerate(self.api.get_sentences_by_id(s_ids))
                         if index < MessageEngine.MAX_SENT_PER_GRP
                     ]
                     yield (heading, get_reference_url(h_id), h_score, str('. '.join(answers) + '.'))
