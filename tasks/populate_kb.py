@@ -21,7 +21,9 @@ def run():
                 print('\n%d of %d completed' % (i, doc_count))
             # insert content
             else:
-                app.populate_kb(heading_list, flattened_sentences)
+                app.process_content(heading_list, flattened_sentences)
+        # Commit changes to KB
+        app.postgres_api.conn.commit()
 
 
 if __name__ == '__main__':

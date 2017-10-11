@@ -62,7 +62,7 @@ Normalize the text into **lowercase**, **singular** form
         return RE_SPACES.sub('', text.replace(rightmost_word, lem_word))
 
 
-def __concat_valid_leaves(leaf_list: list):
+def concat_valid_leaves(leaf_list: list):
 
     def validate_and_yield_entity(leaves: list) -> next:
         entity = ' '.join(leaves)
@@ -82,32 +82,6 @@ def __concat_valid_leaves(leaf_list: list):
     # yield final entity if possible
     if si < len(leaf_list):
         yield from validate_and_yield_entity(leaf_list[si:])
-
-
-def extract_normalized_entities(parse_tree: Tree) -> set:
-    """
-Accepts a **NLTK tree**, extract the entities, and return them in normalized form
-of the entities in a dict
-    :param parse_tree: NLTK Tree
-    :return: set of normalized entities for the tree
-    :rtype: Set
-    """
-    normalized_entities = set()
-    for node in breadth_first(parse_tree, maxdepth=1):
-        # If noun phrase or verb phrase found
-        # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-        # i.e. the ENT nodes are traversed after traversing all VPs and NPs
-        if node.label() in ['VP', 'NP']:
-            # traverse each entity and parametrize the phrase
-            for leaf in breadth_first(node, maxdepth=1):
-                # continue if leaf is not an entity leaf
-                if not isinstance(leaf, Tree) or leaf.label() != 'EN':
-                    continue
-                else:
-                    # Generate entity from tree leaves, and add to normalized_entities
-                    for entity in __concat_valid_leaves(leaf.leaves()):
-                        normalized_entities.add(normalize_text(entity))
-    return normalized_entities
 
 
 def get_wordnet_pos(treebank_tag: str) -> str:

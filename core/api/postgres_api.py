@@ -10,6 +10,7 @@ class PostgresAPI:
         super().__init__()
         self.conn = psql.connect(user="postgres", password="1234", database="semantic_kb")
         self.cursor = self.conn.cursor()
+        self.autocommit = False
         # initial configuration
         if debug:
             self.drop_schema()
@@ -131,12 +132,14 @@ class PostgresAPI:
         ''')
 
         # Commit the DDL
-        self.conn.commit()
+        if self.autocommit:
+            self.conn.commit()
 
     def drop_schema(self) -> None:
         cursor = self.conn.cursor()
         cursor.execute('''DROP SCHEMA IF EXISTS semantic_kb CASCADE''')
-        self.conn.commit()
+        if self.autocommit:
+            self.conn.commit()
 
     def truncate_tables(self) -> None:
         self.cursor.execute('''
@@ -144,24 +147,28 @@ class PostgresAPI:
             semantic_kb.normalizations, semantic_kb.headings, semantic_kb.entities, 
             semantic_kb.sentences, semantic_kb.frames, 
             RESTART IDENTITY''')
-        self.conn.commit()
+        if self.autocommit:
+            self.conn.commit()
 
     def insert_heading(self, heading: str, parent_id: int = None) -> int:
         # Insert one heading along with its parent_id, and return the new heading_id
         self.cursor.execute('''
             INSERT INTO semantic_kb.headings (heading, parent_id) 
-            VALUES (%s, COALESCE(%s,1)) 
-            ON CONFLICT(heading, parent_id) DO UPDATE SET heading = EXCLUDED.heading 
+            VALUES (%s, %s) 
+            ON CONFLICT(heading, parent_id) DO UPDATE SET parent_id = EXCLUDED.parent_id
             RETURNING heading_id
-        ''' % ('%s', '%s'), [heading, parent_id])
+        ''' % ('%s', '%s'), [heading, parent_id if parent_id else 1])
         heading_id = self.cursor.fetchone()[0]
-        self.conn.commit()
-        return int(heading_id)
+        if self.autocommit:
+            self.conn.commit()
+        return int(heading_id if heading_id else 1)
 
     def insert_headings(self, headings: list) -> int:
         current_parent = None
         for heading in headings:
             current_parent = self.insert_heading(heading, current_parent)
+        if self.autocommit:
+            self.conn.commit()
         return int(current_parent)
 
     def insert_sentence(self, sentence: str, normalized_entities: set, heading_id: int = None) -> int:
@@ -187,7 +194,8 @@ class PostgresAPI:
             self.cursor.execute('''
                 INSERT INTO semantic_kb.normalizations(sentence_id, entity_id) VALUES (%s, %s)
             ''' % (sentence_id, entity_id))
-        self.conn.commit()
+        if self.autocommit:
+            self.conn.commit()
         print('.', end='', flush=True)
         return int(sentence_id)
 
@@ -197,7 +205,8 @@ class PostgresAPI:
                 INSERT INTO semantic_kb.frames (sentence_id, frame) 
                 VALUES (%s, %s)
             ''' % ('%s', '%s'), [sentence_id, frame])
-        self.conn.commit()
+        if self.autocommit:
+            self.conn.commit()
 
     def get_heading_hierarchy(self, heading_id: int) -> list:
         self.cursor.execute('''

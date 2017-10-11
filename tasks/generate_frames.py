@@ -5,8 +5,11 @@ from core.services import StanfordServer
 
 
 def run():
+    app = App()
     # Populate KB with Frames
-    App().generate_frames()
+    app.generate_frames()
+    # Commit changes to KB
+    app.postgres_api.conn.commit()
 
 
 if __name__ == '__main__':

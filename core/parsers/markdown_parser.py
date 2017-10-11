@@ -61,7 +61,7 @@ class MarkdownParser:
                 h_dict[l] = MarkdownParser.__strip_markdown_tags(t)
             # if not, parse markdown text as plain text and return with heading hierarchy
             else:
-                content.append(MarkdownParser.__strip_markdown_tags(line))
+                content += [MarkdownParser.__strip_markdown_tags(line)]
         # yield final content if any exists
         if len(content) > 0:
             yield generate_heading_list(), content

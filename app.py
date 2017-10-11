@@ -24,6 +24,7 @@ class App:
         self.app.config['SAML_PATH'] = config.saml['saml_path']
         self.postgres_api = PostgresAPI(debug)
         self.message_engine = MessageEngine(self.postgres_api)
+        self.cache = []
 
         @self.app.route('/', methods=['GET'])
         def home_page():
@@ -83,17 +84,26 @@ class App:
         with StanfordServer():
             self.app.run(host="0.0.0.0")
 
-    # Insert passed headings and sentences into KB
-    def populate_kb(self, headings: list, sentences: list):
-        # insert all headings and get the immediate heading id
-        heading_id = self.postgres_api.insert_headings(headings)
-        # insert the sentences using that heading id
+    def __process_sentences(self, sentences: list, heading_id: int):
+        # sentence parsing logic
         for sentence in sentences:
             for pos_tags in TextParser.generate_pos_tag_sets(sentence):
                 normalized_entities = TextParser.extract_normalized_entities(pos_tags)
                 sentence = ' '.join(('%s_%s' % (token, pos) for token, pos in pos_tags))
-                # serialize the parse tree and insert into database
-                self.postgres_api.insert_sentence(sentence, normalized_entities, heading_id)
+                # add result to cache
+                self.cache += [(sentence, normalized_entities, heading_id)]
+
+    # Insert passed headings and sentences into KB
+    def process_content(self, headings: list, sentences: list):
+        # insert all headings and get the immediate heading id
+        heading_id = self.postgres_api.insert_headings(headings)
+        # insert the sentences using that heading id
+        self.__process_sentences(sentences, heading_id)
+        # persist cache in database
+        if len(self.cache) > 0:
+            for s, n, h in self.cache:
+                self.postgres_api.insert_sentence(s, n, h)
+            self.cache.clear()
 
     # Generate frames for KB sentences to create semantics
     def generate_frames(self):

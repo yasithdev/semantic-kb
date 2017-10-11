@@ -1,8 +1,8 @@
 import re
-from collections import Generator, Iterator
+from collections import Generator
 from difflib import SequenceMatcher
 
-from nltk import (RegexpParser, Tree)
+from nltk import (RegexpParser, Tree, breadth_first)
 from nltk.corpus import (framenet as fn, stopwords)
 from nltk.stem import WordNetLemmatizer
 
@@ -81,23 +81,44 @@ class TextParser:
             search_words[pos] = search_words.get(pos, []) + [search_word]
 
         # for each pos tag, query frame-net database and return results
-        for pos in dict.keys(search_words):
-            words = [x for x in set(search_words[pos])]
-            lex_units = fn.lus(r'(?i)(^|\s)%s(\s.+)?\.%s' % ('|'.join(words), pos))
-            # If lex units matched, add them to results
-            results.update((lexUnit.frame.name for lexUnit in lex_units))
-
+        lex_units = fn.lus(
+            r'(?i)' +
+            # regex for all search words, of all pos tag types
+            '|'.join(
+                r'(^|\s)%s(\s.+)?\.%s' % ('|'.join(set(search_words[pos])), pos) for pos in dict.keys(search_words)
+            )
+        )
+        # If lex units matched, add them to results
+        results.update((lexUnit.frame.name for lexUnit in lex_units))
         print('Frames: %d' % len(results))
         return results
 
     @staticmethod
-    def generate_parse_tree(pos_tags: Iterator):
+    def generate_parse_tree(pos_tags: list):
         return PARSER.parse(Tree('S', (Tree(pos, [t]) for t, pos in pos_tags)))
 
     @staticmethod
-    def extract_normalized_entities(pos_tags: Generator) -> set:
-        try:
-            # extract set of normalized entities and return them
-            return nlp.extract_normalized_entities(TextParser.generate_parse_tree(pos_tags))
-        except Exception as e:
-            input(e.args)
+    def extract_normalized_entities(pos_tags: list) -> set:
+        """
+    Accepts a **POS Tags list**, extract the entities, and return them in normalized form
+    of the entities in a dict
+        :param pos_tags: list of pos tags
+        :return: set of normalized entities for the tree
+        :rtype: Set
+        """
+        normalized_entities = set()
+        for node in breadth_first(TextParser.generate_parse_tree(pos_tags), maxdepth=1):
+            # If noun phrase or verb phrase found
+            # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
+            # i.e. the ENT nodes are traversed after traversing all VPs and NPs
+            if node.label() in ['VP', 'NP']:
+                # traverse each entity and parametrize the phrase
+                for leaf in breadth_first(node, maxdepth=1):
+                    # continue if leaf is not an entity leaf
+                    if not isinstance(leaf, Tree) or leaf.label() != 'EN':
+                        continue
+                    else:
+                        # Generate entity from tree leaves, and add to normalized_entities
+                        for entity in nlp.concat_valid_leaves(leaf.leaves()):
+                            normalized_entities.add(nlp.normalize_text(entity))
+        return normalized_entities
