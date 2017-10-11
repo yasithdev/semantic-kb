@@ -6,6 +6,7 @@ import config
 from core.api import accepts_json, PostgresAPI
 from core.engine.msg_engine import MessageEngine
 from core.parsers import (TextParser, nlp)
+from core.services import StanfordServer
 
 API_COMMANDS = [
     {'url': '/', 'request': 'GET', 'function': 'This Page'},
@@ -31,42 +32,56 @@ class App:
         @self.app.route('/display/<int:heading_id>', methods=['GET'])
         def view_content(heading_id: int):
             is_json = accepts_json(request)
-            data = self.postgres_api.get_heading_content_by_id(heading_id)
-            if len(data.keys()) != 0:
-                data['content'] = '. '.join([
-                    nlp.extract_sentence(TextParser.generate_parse_tree(pos_tags), True)
-                    for pos_tags in data['content']
-                ])
-            if is_json:
-                return json.dumps(data)
-            else:
-                return render_template('content.html', data=data)
+            try:
+                data = self.postgres_api.get_heading_content_by_id(heading_id)
+                if len(data.keys()) != 0:
+                    data['content'] = '. '.join([
+                        nlp.extract_sentence(TextParser.generate_parse_tree(pos_tags), True)
+                        for pos_tags in data['content']
+                    ])
+                if is_json:
+                    return json.dumps(data)
+                else:
+                    return render_template('content.html', data=data)
+            except BaseException as ex:
+                data = {'error': ex.args}
+                if is_json:
+                    return json.dumps(data)
+                else:
+                    return render_template('error.html', data=data)
 
         @self.app.route('/content', methods=['GET'])
         def answer_question():
             is_json = accepts_json(request)
-            question = request.args.get('question')
-            answers = [
-                {'heading': heading, 'url': url, 'score': round(score, 2), 'answer': answer}
-                for heading, url, score, answer in self.message_engine.process_and_answer(question)
-            ] if question is not None else []
+            try:
+                question = request.args.get('question')
+                answers = [
+                    {'heading': heading, 'url': url, 'score': round(score, 2), 'answer': answer}
+                    for heading, url, score, answer in self.message_engine.process_and_answer(question)
+                ] if question is not None else []
 
-            # output the answers
-            if is_json:
-                return json.dumps({
-                    'question': question,
-                    'answers': answers
-                })
-            else:
-                return render_template('answers.html', question=question, answers=answers)
+                # output the answers
+                if is_json:
+                    return json.dumps({
+                        'question': question,
+                        'answers': answers
+                    })
+                else:
+                    return render_template('answers.html', question=question, answers=answers)
+            except BaseException as ex:
+                data = {'error': ex.args}
+                if is_json:
+                    return json.dumps(data)
+                else:
+                    return render_template('error.html', data=data)
 
         @self.app.route('/content', methods=['POST'])
         def add_content_to_kb():
             return ""
 
     def start(self):
-        # with StanfordServer():
-            self.app.run()
+        with StanfordServer():
+            self.app.run(host="0.0.0.0")
 
     # Insert passed headings and sentences into KB
     def populate_kb(self, headings: list, sentences: list):

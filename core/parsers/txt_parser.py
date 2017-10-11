@@ -49,20 +49,25 @@ class TextParser:
     @staticmethod
     def get_frames(pos_tags: Generator) -> set:
 
-        # iterate through each token, search for frames and add to results
         results = set()
 
+        # iterate through each token, and create a dict of token -> words
+        search_words = {}
         for token, pos in pos_tags:
 
             search_word = token.lower()
 
             # Ignore single-letter words and stopwords
-            if len(search_word) < 2 or search_word in STOPWORDS:
+            if pos[0] == ['N'] or len(search_word) < 2 or search_word in STOPWORDS:
                 continue
 
             # Get wordnet-pos. Ignore words with no wordnet pos tag
             pos = nlp.get_wordnet_pos(pos)
             if pos == '':
+                # add search_word to results set if eligible
+                normalized_token = nlp.normalize_text(search_word, lemmatize=False, ignore_num=True)
+                if len(normalized_token) > 1:
+                    results.add(normalized_token)
                 continue
 
             # If lemma is not a stop-word, use that instead of lowercase token
@@ -72,17 +77,15 @@ class TextParser:
 
             # Get lexical units matching the search word and pos
             search_word = re.escape(search_word)
-            lex_units = fn.lus(r'(?i)(^|\s)%s(\s.+)?\.%s' % (search_word, pos))
+            # update search_words dict
+            search_words[pos] = search_words.get(pos, []) + [search_word]
 
-            # If no lex units matched and the search_word is not a noun, add the search word to results
-            if len(lex_units) == 0:
-                if pos != 'n':
-                    results.add(nlp.normalize_entity(search_word))
-
+        # for each pos tag, query frame-net database and return results
+        for pos in dict.keys(search_words):
+            words = [x for x in set(search_words[pos])]
+            lex_units = fn.lus(r'(?i)(^|\s)%s(\s.+)?\.%s' % ('|'.join(words), pos))
             # If lex units matched, add them to results
-            else:
-                for lexUnit in lex_units:
-                    results.add(lexUnit.frame.name)
+            results.update((lexUnit.frame.name for lexUnit in lex_units))
 
         print('Frames: %d' % len(results))
         return results

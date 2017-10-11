@@ -16,6 +16,7 @@ MAX_LEAF_LENGTH = 25
 MAX_ENTITY_LENGTH = 100
 ALNUM_THRESHOLD = 0.5
 RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9\s]')
+RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z\s]')
 RE_SPACES = re.compile(r'\s+')
 RE_ACRONYM_PLURAL = re.compile(r'(?<=[A-Z])s$')
 RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
@@ -32,30 +33,33 @@ def parametrize_entity(entity: str) -> str:
     return '[%s(@E)]' % entity
 
 
-def normalize_entity(entity: str) -> str:
+def normalize_text(text: str, lemmatize: bool = True, ignore_num: bool = False) -> str:
     """
-Normalize the entity into **lowercase**, **singular** form
-    :param entity: input entity
+Normalize the text into **lowercase**, **singular** form
+    :param text: input text
+    :param lemmatize: default is True. If true, lemmatizes the last word of the text
+    :param ignore_num: default is False. If true, ignores numerics completely
     :return: output string
     :rtype: str
     """
     lemmatizer = WordNetLemmatizer()
     # remove plurals from acronyms
-    entity = RE_ACRONYM_PLURAL.sub('', entity)
+    text = RE_ACRONYM_PLURAL.sub('', text)
     # remove all non-alphanumeric/space characters
-    entity = RE_NON_ALNUM_SPACE.sub(' ', entity)
+    text = RE_NON_ALPHA_SPACE.sub(' ', text) if ignore_num else RE_NON_ALNUM_SPACE.sub(' ', text)
     # remove extra spaces, strip, and lowercase
-    entity = RE_SPACES.sub(' ', entity).strip().lower()
+    text = RE_SPACES.sub(' ', text).strip().lower()
     # get rightmost word
-    rightmost_word = RE_RIGHTMOST_WORD.findall(entity)
+    rightmost_word = RE_RIGHTMOST_WORD.findall(text)
     # lemmatize and return entity if no rightmost words found
     if len(rightmost_word) == 0:
-        return RE_SPACES.sub('', lemmatizer.lemmatize(entity))
-    # lemmatize the rightmost word and return new entity
+        lemma = lemmatizer.lemmatize(text) if lemmatize else text
+        return RE_SPACES.sub('', lemma)
+    # lemmatize the rightmost word and return new text
     else:
         rightmost_word = rightmost_word[-1]
-        lem_word = lemmatizer.lemmatize(rightmost_word)
-        return RE_SPACES.sub('', entity.replace(rightmost_word, lem_word))
+        lem_word = lemmatizer.lemmatize(rightmost_word) if lemmatize else rightmost_word
+        return RE_SPACES.sub('', text.replace(rightmost_word, lem_word))
 
 
 def __concat_valid_leaves(leaf_list: list):
@@ -102,7 +106,7 @@ of the entities in a dict
                 else:
                     # Generate entity from tree leaves, and add to normalized_entities
                     for entity in __concat_valid_leaves(leaf.leaves()):
-                        normalized_entities.add(normalize_entity(entity))
+                        normalized_entities.add(normalize_text(entity))
     return normalized_entities
 
 
