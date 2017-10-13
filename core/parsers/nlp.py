@@ -1,10 +1,8 @@
 import re
 from collections import Generator
 
-from nltk import Tree
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
-from nltk.util import breadth_first
 
 from core.api import StanfordAPI
 
@@ -63,7 +61,6 @@ Normalize the text into **lowercase**, **singular** form
 
 
 def concat_valid_leaves(leaf_list: list):
-
     def validate_and_yield_entity(leaves: list) -> next:
         entity = ' '.join(leaves)
         total_len = len(entity)
@@ -113,62 +110,6 @@ POS-tag a sentence using Stanford pos-tagger, and return a list of pos_tagged to
     for token, pos in STANFORD_API.pos_tag(sentence):
         # yield wordnet pos-tag or penn-treebank pos tags depending on choice
         yield [token, get_wordnet_pos(pos) if wordnet_pos else pos]
-
-
-def extract_sentence(parse_tree: Tree, preserve_entities=False) -> str:
-    """
-Recreate and return original sentence from parse_tree. If preserve_entities set to False (default), entities
-are replaced by a placeholder to simplify sentence
-    :param parse_tree: nltk Tree
-    :param preserve_entities: whether to preserve entities, or replace them with a placeholder
-    :return: sentence
-    """
-    # concatenate all leaves and create a sentence if entities are preserved
-    if preserve_entities:
-        entity_sanitized_sent = ' '.join(parse_tree.leaves())
-
-    # if not, replace each entity with a placeholder and create a sentence
-    else:
-        entity_sanitized_sent = ''
-        # declare temporary variable
-        for node in breadth_first(parse_tree, maxdepth=1):
-            # If noun phrase or verb phrase found
-            # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-            # i.e. the ENT nodes are traversed after traversing all VPs and NPs
-            if node.label() in ['VP', 'NP']:
-                phrase = ' '.join(node.leaves())
-                # traverse each entity and parametrize the phrase
-                for leaf in breadth_first(node, maxdepth=1):
-                    # continue if leaf is not an entity leaf
-                    if not isinstance(leaf, Tree) or leaf.label() != 'EN':
-                        continue
-                    else:
-                        entity = ' '.join(leaf.leaves())
-                        phrase = phrase.replace(entity, ENTITY_PLACEHOLDER)
-                entity_sanitized_sent += ' ' + phrase
-
-    entity_sanitized_sent = entity_sanitized_sent.strip()
-
-    # sanitize bracket tags
-    if preserve_entities:
-        if len(RE_BRACKETS.findall(entity_sanitized_sent)) > 0:
-            # replace bracket tags with correct brackets
-            entity_sanitized_sent = re.sub(r'\s*-LCB-\s*', ' {', entity_sanitized_sent).strip()
-            entity_sanitized_sent = re.sub(r'\s*-RCB-\s*', '} ', entity_sanitized_sent).strip()
-            entity_sanitized_sent = re.sub(r'\s*-LSB-\s*', ' [', entity_sanitized_sent).strip()
-            entity_sanitized_sent = re.sub(r'\s*-RSB-\s*', '] ', entity_sanitized_sent).strip()
-            entity_sanitized_sent = re.sub(r'\s*-LRB-\s*', ' (', entity_sanitized_sent).strip()
-            entity_sanitized_sent = re.sub(r'\s*-RRB-\s*', ') ', entity_sanitized_sent).strip()
-    else:
-        # remove any bracket tags
-        entity_sanitized_sent = RE_BRACKETS.sub(' ', entity_sanitized_sent).strip()
-
-    # if ENTITY placeholders are used, merge neighbouring placeholders
-    if not preserve_entities:
-        entity_sanitized_sent = RE_ENTITY_SUB_MULTIPLE.sub(ENTITY_PLACEHOLDER, entity_sanitized_sent).strip()
-
-    # return sanitized sentence
-    return entity_sanitized_sent
 
 
 def sent_tokenize(in_str: str) -> Generator:

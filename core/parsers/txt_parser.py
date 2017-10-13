@@ -122,3 +122,61 @@ class TextParser:
                         for entity in nlp.concat_valid_leaves(leaf.leaves()):
                             normalized_entities.add(nlp.normalize_text(entity))
         return normalized_entities
+
+    @staticmethod
+    def extract_sentence(pos_tags: list, preserve_entities=False) -> str:
+        """
+    Recreate and return original sentence from parse_tree. If preserve_entities set to False (default), entities
+    are replaced by a placeholder to simplify sentence
+        :param pos_tags: List/Generator of POS Tags
+        :param preserve_entities: whether to preserve entities, or replace them with a placeholder
+        :return: sentence
+        """
+        # concatenate all leaves and create a sentence if entities are preserved
+        if preserve_entities:
+            entity_sanitized_sent = ' '.join(token for token, pos in pos_tags)
+
+        # if not, replace each entity with a placeholder and create a sentence
+        else:
+            entity_sanitized_sent = ''
+            parse_tree = PARSER.parse(TextParser.generate_parse_tree(pos_tags))
+            # declare temporary variable
+            for node in breadth_first(parse_tree, maxdepth=1):
+                # If noun phrase or verb phrase found
+                # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
+                # i.e. the ENT nodes are traversed after traversing all VPs and NPs
+                if node.label() in ['VP', 'NP']:
+                    phrase = ' '.join(node.leaves())
+                    # traverse each entity and parametrize the phrase
+                    for leaf in breadth_first(node, maxdepth=1):
+                        # continue if leaf is not an entity leaf
+                        if not isinstance(leaf, Tree) or leaf.label() != 'EN':
+                            continue
+                        else:
+                            entity = ' '.join(leaf.leaves())
+                            phrase = phrase.replace(entity, nlp.ENTITY_PLACEHOLDER)
+                    entity_sanitized_sent += ' ' + phrase
+
+        entity_sanitized_sent = entity_sanitized_sent.strip()
+
+        # sanitize bracket tags
+        if preserve_entities:
+            if len(nlp.RE_BRACKETS.findall(entity_sanitized_sent)) > 0:
+                # replace bracket tags with correct brackets
+                entity_sanitized_sent = re.sub(r'\s*-LCB-\s*', ' {', entity_sanitized_sent).strip()
+                entity_sanitized_sent = re.sub(r'\s*-RCB-\s*', '} ', entity_sanitized_sent).strip()
+                entity_sanitized_sent = re.sub(r'\s*-LSB-\s*', ' [', entity_sanitized_sent).strip()
+                entity_sanitized_sent = re.sub(r'\s*-RSB-\s*', '] ', entity_sanitized_sent).strip()
+                entity_sanitized_sent = re.sub(r'\s*-LRB-\s*', ' (', entity_sanitized_sent).strip()
+                entity_sanitized_sent = re.sub(r'\s*-RRB-\s*', ') ', entity_sanitized_sent).strip()
+        else:
+            # remove any bracket tags
+            entity_sanitized_sent = nlp.RE_BRACKETS.sub(' ', entity_sanitized_sent).strip()
+
+        # if ENTITY placeholders are used, merge neighbouring placeholders
+        if not preserve_entities:
+            entity_sanitized_sent = nlp.RE_ENTITY_SUB_MULTIPLE.sub(nlp.ENTITY_PLACEHOLDER,
+                                                                   entity_sanitized_sent).strip()
+
+        # return sanitized sentence
+        return entity_sanitized_sent

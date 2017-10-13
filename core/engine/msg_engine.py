@@ -1,12 +1,12 @@
 import re
 from difflib import SequenceMatcher
 
-from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, nlp)
+from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser)
 
 
 def get_reference_url(h_id: int) -> str:
     # Get the first occurring page link when traversing up the headings
-    return 'http://docs.wso2.com/display/%s' % h_id
+    return '/display/%s' % h_id
 
 
 class MessageEngine:
@@ -124,7 +124,7 @@ class MessageEngine:
                 # Merge nearby sentences and yield merged_matches
                 for (h_id, heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
                     answers = [
-                        nlp.extract_sentence(_TextParser.generate_parse_tree(pos_tags), preserve_entities=True)
+                        _TextParser.extract_sentence(pos_tags, preserve_entities=True)
                         for index, (sent_id, pos_tags) in enumerate(self.api.get_sentences_by_id(s_ids))
                         if index < MessageEngine.MAX_SENT_PER_GRP
                     ]

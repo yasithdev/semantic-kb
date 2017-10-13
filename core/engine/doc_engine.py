@@ -6,7 +6,7 @@ from core.parsers import (MarkdownParser, nlp)
 RE_PRODUCT = re.compile(r'/display/(.+?)(?=/|$)')
 
 
-def run(mongo_api: MongoAPI):
+def get_doc_content(mongo_api: MongoAPI):
     # Load required tools and data
     training_data = mongo_api.get_all_documents(mongo_api.SCRAPED_DOCS)
 

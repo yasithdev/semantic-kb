@@ -6,9 +6,9 @@ ROOT_NODE_NAME = 'ROOT'
 
 
 class PostgresAPI:
-    def __init__(self, debug: bool = False) -> None:
+    def __init__(self, debug: bool = False, user="postgres", password="1234", database="semantic_kb") -> None:
         super().__init__()
-        self.conn = psql.connect(user="postgres", password="1234", database="semantic_kb")
+        self.conn = psql.connect(user=user, password=password, database=database)
         self.cursor = self.conn.cursor()
         self.autocommit = False
         # initial configuration
@@ -343,5 +343,5 @@ class PostgresAPI:
             return {
                 'heading_id': row[0],
                 'heading': row[1],
-                'content': row[2]
+                'content': ((tuple(str.rsplit(tag, '_', 1)) for tag in sent.split()) for sent in row[2])
             }

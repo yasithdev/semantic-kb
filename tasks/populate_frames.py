@@ -12,7 +12,7 @@ def run():
     app.postgres_api.conn.commit()
 
 
-if __name__ == '__main__':
+def populate_frames():
     start_time = datetime.now()
     try:
         run()
@@ -21,3 +21,7 @@ if __name__ == '__main__':
             run()
     completion_time = datetime.now()
     print('Done! (time taken: %s seconds)' % (completion_time - start_time).seconds)
+
+
+if __name__ == '__main__':
+    populate_frames()

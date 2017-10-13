@@ -5,7 +5,7 @@ from flask import (Flask, request, render_template)
 import config
 from core.api import accepts_json, PostgresAPI
 from core.engine.msg_engine import MessageEngine
-from core.parsers import (TextParser, nlp)
+from core.parsers import (TextParser)
 from core.services import StanfordServer
 
 API_COMMANDS = [
@@ -22,7 +22,7 @@ class App:
         self.app = Flask(__name__)
         self.app.config['SECRET_KEY'] = config.saml['secret_key']
         self.app.config['SAML_PATH'] = config.saml['saml_path']
-        self.postgres_api = PostgresAPI(debug)
+        self.postgres_api = PostgresAPI(debug, database="semantic_kb_v1")
         self.message_engine = MessageEngine(self.postgres_api)
         self.cache = []
 
@@ -35,9 +35,10 @@ class App:
             is_json = accepts_json(request)
             try:
                 data = self.postgres_api.get_heading_content_by_id(heading_id)
+                print(data)
                 if len(data.keys()) != 0:
                     data['content'] = '. '.join([
-                        nlp.extract_sentence(TextParser.generate_parse_tree(pos_tags), True)
+                        TextParser.extract_sentence(pos_tags, preserve_entities=True)
                         for pos_tags in data['content']
                     ])
                 if is_json:
