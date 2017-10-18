@@ -1,5 +1,5 @@
 import re
-from collections import Generator
+from collections import Iterable
 from difflib import SequenceMatcher
 
 from nltk import (RegexpParser, Tree, breadth_first)
@@ -47,8 +47,7 @@ class TextParser:
         return (list(nlp.pos_tag(sentence)) for sentence in nlp.sent_tokenize(input_string))
 
     @staticmethod
-    def get_frames(pos_tags: Generator) -> set:
-
+    def get_frames(pos_tags: Iterable) -> set:
         results = set()
 
         # iterate through each token, and create a dict of token -> words
@@ -110,7 +109,7 @@ class TextParser:
         for node in breadth_first(TextParser.generate_parse_tree(pos_tags), maxdepth=1):
             # If noun phrase or verb phrase found
             # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-            # i.e. the ENT nodes are traversed after traversing all VPs and NPs
+            # i.pbar. the ENT nodes are traversed after traversing all VPs and NPs
             if node.label() in ['VP', 'NP']:
                 # traverse each entity and parametrize the phrase
                 for leaf in breadth_first(node, maxdepth=1):
@@ -144,7 +143,7 @@ class TextParser:
             for node in breadth_first(parse_tree, maxdepth=1):
                 # If noun phrase or verb phrase found
                 # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-                # i.e. the ENT nodes are traversed after traversing all VPs and NPs
+                # i.pbar. the ENT nodes are traversed after traversing all VPs and NPs
                 if node.label() in ['VP', 'NP']:
                     phrase = ' '.join(node.leaves())
                     # traverse each entity and parametrize the phrase
@@ -177,6 +176,10 @@ class TextParser:
         if not preserve_entities:
             entity_sanitized_sent = nlp.RE_ENTITY_SUB_MULTIPLE.sub(nlp.ENTITY_PLACEHOLDER,
                                                                    entity_sanitized_sent).strip()
+
+        # add a fullstop if sentence does not end with a punctuation
+        if entity_sanitized_sent[-1] not in '!;:.':
+            entity_sanitized_sent += '.'
 
         # return sanitized sentence
         return entity_sanitized_sent

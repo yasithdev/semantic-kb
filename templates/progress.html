@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Task Progress - Support KB</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+</head>
+
+<body>
+
+<div class="container">
+    <h1>Task -
+        <small>{{ task }}</small>
+    </h1>
+    <h2>
+        Populate Content
+        <small id="kb-progress-text"></small>
+    </h2>
+    <div class="progress">
+        <div id="kb-progress" class="progress-bar progress-bar-striped active" role="progressbar" style="width: 0;"
+             aria-valuenow="0"
+             aria-valuemin="0" aria-valuemax="100">
+
+        </div>
+    </div>
+    <h2>
+        Populate Frames
+        <small id="frames-progress-text"></small>
+    </h2>
+    <div class="progress">
+        <div id="frames-progress" class="progress-bar progress-bar-striped active" role="progressbar" style="width: 0;"
+             aria-valuenow="0"
+             aria-valuemin="0" aria-valuemax="100">
+        </div>
+    </div>
+</div>
+
+<script>
+    var kb_event = new EventSource("/progress_kb");
+    kb_event.onmessage = function (event) {
+        d = JSON.parse(event.data);
+        pbar = document.getElementById('kb-progress');
+        ptext = document.getElementById('kb-progress-text');
+        pbar.style = 'width: ' + d.percent + '%;';
+        pbar.innerText = d.percent + '%';
+        ptext.innerText = '(' + d.remaining + ' seconds remaining)';
+        if (d.percent === 100 || d.percent === 0) {
+            kb_event.close()
+        }
+    };
+    var frame_event = new EventSource("/progress_frames");
+    frame_event.onmessage = function (event) {
+        d = JSON.parse(event.data);
+        pbar = document.getElementById('frames-progress');
+        ptext = document.getElementById('frames-progress-text');
+        pbar.style = 'width: ' + d.percent + '%;';
+        pbar.innerText = d.percent + '%';
+        ptext.innerText = '(' + d.remaining + ' seconds remaining)';
+        if (d.percent === 100 || d.percent === 0) {
+            frame_event.close()
+        }
+    };
+</script>
+</body>
+
+</html>

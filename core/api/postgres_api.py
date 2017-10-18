@@ -6,15 +6,16 @@ ROOT_NODE_NAME = 'ROOT'
 
 
 class PostgresAPI:
-    def __init__(self, debug: bool = False, user="postgres", password="1234", database="semantic_kb") -> None:
+    def __init__(self, user="postgres", password="1234", database="semantic_kb") -> None:
         super().__init__()
         self.conn = psql.connect(user=user, password=password, database=database)
         self.cursor = self.conn.cursor()
         self.autocommit = False
-        # initial configuration
-        if debug:
-            self.drop_schema()
-            self.create_schema()
+
+    def initialize_db(self):
+        self.drop_schema()
+        self.create_schema()
+        self.conn.commit()
 
     def create_schema(self) -> None:
         cursor = self.conn.cursor()
@@ -43,7 +44,8 @@ class PostgresAPI:
             CREATE TABLE IF NOT EXISTS semantic_kb.sentences (
               sentence_id SERIAL PRIMARY KEY,
               sentence TEXT,
-              heading_id INTEGER REFERENCES semantic_kb.headings(heading_id) DEFAULT 1
+              heading_id INTEGER REFERENCES semantic_kb.headings(heading_id) DEFAULT 1,
+              UNIQUE(sentence, heading_id)
             )''')
 
         # Create Table for Normalizations
@@ -56,9 +58,9 @@ class PostgresAPI:
         # Create Table for Frames
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS semantic_kb.frames (
-            sentence_id INTEGER REFERENCES semantic_kb.sentences(sentence_id),
-            frame TEXT,
-            UNIQUE(sentence_id, frame))''')
+            frame TEXT PRIMARY KEY,
+            sentence_ids INTEGER[] DEFAULT '{}'
+            )''')
 
         # Add Fuzzy String match extensions for semantic_kb
         cursor.execute('''CREATE EXTENSION fuzzystrmatch WITH SCHEMA semantic_kb''')
@@ -125,10 +127,10 @@ class PostgresAPI:
 
         # Create View for observing content under each heading
         self.cursor.execute('''
-            CREATE OR REPLACE VIEW semantic_kb.heading_content AS 
-            SELECT heading_id, heading, array_agg(sentences.sentence) AS content FROM semantic_kb.sentences 
-            JOIN semantic_kb.headings USING(heading_id)
-            GROUP BY heading_id, heading
+            CREATE OR REPLACE VIEW semantic_kb.heading_content AS
+              SELECT headings.heading_id, headings.heading, array_agg(sentences.sentence ORDER BY sentence_id ASC) AS content
+              FROM (semantic_kb.headings JOIN semantic_kb.sentences USING (heading_id))
+              GROUP BY headings.heading_id
         ''')
 
         # Commit the DDL
@@ -175,7 +177,8 @@ class PostgresAPI:
         # Insert parametrized sentence
         self.cursor.execute('''
             INSERT INTO semantic_kb.sentences (sentence, heading_id) 
-            VALUES (%s,%s) RETURNING sentence_id''' % ('%s', '%s'),
+            VALUES (%s,%s) ON CONFLICT (sentence, heading_id) DO UPDATE SET sentence = EXCLUDED.sentence RETURNING sentence_id''' % (
+            '%s', '%s'),
                             [sentence, heading_id])
         sentence_id = self.cursor.fetchone()[0]
 
@@ -202,9 +205,9 @@ class PostgresAPI:
     def insert_frames(self, sentence_id: str, frames: set) -> None:
         for frame in frames:
             self.cursor.execute('''
-                INSERT INTO semantic_kb.frames (sentence_id, frame) 
-                VALUES (%s, %s)
-            ''' % ('%s', '%s'), [sentence_id, frame])
+                INSERT INTO semantic_kb.frames (frame, sentence_ids) 
+                VALUES (%s, %s) ON CONFLICT (frame) DO UPDATE SET sentence_ids = frames.sentence_ids || EXCLUDED.sentence_ids
+            ''' % ('%s', '%s'), [frame, '{%d}' % sentence_id])
         if self.autocommit:
             self.conn.commit()
 
@@ -286,15 +289,13 @@ class PostgresAPI:
                 sent_param = str(sent_ids)[1:-1]
                 frame_param = str(input_frames)[1:-1]
                 self.cursor.execute('''
-                    SELECT DISTINCT 
-                      sentence_id 
-                    FROM 
-                      semantic_kb.frames 
-                    WHERE 
-                      sentence_id IN ({0})
-                    AND
-                      frame IN ({1})'''.format(sent_param, frame_param))
-                return set([int(row[0]) for row in self.cursor.fetchall()])
+                    SELECT unnested.sentence_id FROM
+                      (SELECT DISTINCT frame, unnest(sentence_ids) AS sentence_id FROM semantic_kb.frames) AS unnested
+                    WHERE
+                      unnested.sentence_id IN ({0}) AND 
+                      unnested.frame IN ({1})
+                '''.format(sent_param, frame_param))
+                return sent_ids.intersection(int(row[0]) for row in self.cursor.fetchall())
 
         # Actual query computation logic starts here
         entity_ids = get_matching_entity_ids(entities)
@@ -307,14 +308,13 @@ class PostgresAPI:
         print('# Frame-Filtered sentence Ids: %s' % len(frame_filtered_sent_ids))
 
         if len(frame_filtered_sent_ids) > 0:
+            print('%d sentences returned' % len(frame_filtered_sent_ids))
             # Option 1 - Frame filter returns sentences. Gives most relevant results
             return frame_filtered_sent_ids
-        elif len(entity_matching_sent_ids) > 0:
-            # Option 2 - Frame filter returns no sentences. Gives results relevant to entity
-            return entity_matching_sent_ids
         else:
-            # Option 3 - No entity matching sentences. Return no results
-            return set([])
+            # Option 2 - Frame filter returns no sentences. Gives results relevant to entity
+            print('%d sentences returned' % len(entity_matching_sent_ids))
+            return entity_matching_sent_ids
 
     def group_sentences_by_heading(self, sentence_ids: set) -> list:
         if sentence_ids is None or len(sentence_ids) == 0:
@@ -322,11 +322,14 @@ class PostgresAPI:
         sentence_id_param = str(sentence_ids).replace('{', '').replace('}', '')
         self.cursor.execute('''
           SELECT
-            heading_id,
-            (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(heading_id) GH 
-            WHERE GH.index <= 0) heading, 
-            array_agg(sentence_id ORDER BY sentence_id ASC) sentence_ids FROM semantic_kb.sentences 
-            WHERE sentence_id IN (%s)
+            SENT.heading_id,
+            (SELECT string_agg(GH.heading, ' > ') FROM semantic_kb.get_hierarchy(SENT.heading_id) GH 
+            WHERE GH.index <= 0) heading,
+            array_agg(DISTINCT sentence_id ORDER BY sentence_id ASC) sentence_ids,
+            (SELECT MIN(sentence_id) FROM semantic_kb.sentences AS S WHERE S.heading_id = SENT.heading_id) first_sentence_id,
+            (SELECT MAX(sentence_id) FROM semantic_kb.sentences AS S WHERE S.heading_id = SENT.heading_id) last_sentence_id
+          FROM semantic_kb.sentences AS SENT
+          WHERE SENT.sentence_id IN (%s)
           GROUP BY heading_id
         ''' % sentence_id_param)
         return self.cursor.fetchall()

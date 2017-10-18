@@ -18,7 +18,7 @@ RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z\s]')
 RE_SPACES = re.compile(r'\s+')
 RE_ACRONYM_PLURAL = re.compile(r'(?<=[A-Z])s$')
 RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
-# HTTP header (e.g.,"Authorization: Bearer NtBQkXoKElu0H1a1fQ0DWfo6IX4a,") and it
+# HTTP header (pbar.g.,"Authorization: Bearer NtBQkXoKElu0H1a1fQ0DWfo6IX4a,") and it
 RE_WORD_TOKENIZE = re.compile(r'[^A-Za-z0-9]*\s+|\s*[^A-Za-z0-9]+|[^A-Za-z0-9]+\s*(?=$)|\s+[^A-Za-z0-9]*(?=$)')
 RE_SENT_TOKENIZE = re.compile(r'.+?(?<=[A-Za-z])[!.?;:]\s*(?=[A-Z]|$)|.+?$')
 RE_ENTITY = re.compile(r'\[(.+?)\(@E\)\]')

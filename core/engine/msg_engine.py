@@ -10,10 +10,11 @@ def get_reference_url(h_id: int) -> str:
 
 
 class MessageEngine:
-    MAX_SENT_PER_GRP = 3
-    MAX_GRP_PER_ANS = 5
+    MAX_SENT_PER_GRP = 5
+    MAX_GRP_PER_ANS = 10
     ACCEPT_RATIO = 0.75
     RE_ALPHANUMERIC = re.compile(r'[^A-Za-z0-9]')
+    DEFAULT_FEEDBACK = "Sorry, I don't know the answer for that."
 
     def __init__(self, api) -> None:
         super().__init__()
@@ -21,68 +22,67 @@ class MessageEngine:
         self.api = api
 
     @staticmethod
-    def __merge_adjacent_sent_ids(s: set) -> next:
-        # sort the matching ids
+    def __merge_adjacent_sent_ids(s: set, first: int, last: int) -> next:
+        # sort the sentence ids
         s = sorted(s)
+        print(s)
         # logic
-        if len(s) > 1:
-            for i, e in enumerate(s):
-                if i + 1 < len(s) and s[i + 1] - e <= MessageEngine.MAX_SENT_PER_GRP:
-                    yield from range(s[i], s[i + 1])
-        elif len(s) == 1:
-            yield from range(s[0], s[0] + MessageEngine.MAX_SENT_PER_GRP)
+        for i, e in enumerate(s):
+            yield e
+            # yield up to MAX_SENT_PER_GRP sentences after current sentence.
+            if i + 1 < len(s) and s[i + 1] - e <= MessageEngine.MAX_SENT_PER_GRP:
+                yield from range(e + 1, s[i + 1])
+            else:
+                yield from range(e + 1, min([e + MessageEngine.MAX_SENT_PER_GRP, last + 1]))
 
-    def __extract_heading_entities(self, headings: list) -> next:
+    @staticmethod
+    def _extract_heading_entities(headings: list) -> next:
         # assign headings as a 2D list of entities extracted from headings
         for _heading in headings:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
             _entities = set()
+            _frames = set()
             for pos_tags in _TextParser.generate_pos_tag_sets(_heading):
+                pos_tags = list(pos_tags)
                 for normalized_entities in _TextParser.extract_normalized_entities(pos_tags):
                     _entities = _entities.union([normalized_entities])
             # add entities and content length to heading_entities as LIFO
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
             yield (_heading, _content_length, _entities)
 
-    def __get_heading_score(self, heading_string: str, q_entities: set) -> float:
-        _score = float(0)
+    def __get_heading_score(self, heading_string: str, q_entities: set, q_frames: set) -> float:
+        _score = 0
         # get the heading entities and print it
-        _heading_entities = self.__extract_heading_entities(heading_string.split(' > ')[::-1])
+        _heading_entities = self._extract_heading_entities(heading_string.split(' > ')[::-1])
         # calculate entity matching score for entities in each heading
         for h_index, (heading, h_length, h_entities) in enumerate(_heading_entities):
             # match entities of current heading against question entities
-            q_entity_hits = int(0)
-            # score for the current heading
-            _h_score = float(0)
+            q_entity_hit_ratio = 0
+            q_entity_hits = 0
             # logic
             for q_entity in q_entities:
                 # becomes true if question entity found within heading entities
-                _q_e_found = False
                 # iterate through heading entities for each question entity
                 for h_entity in h_entities:
                     # calculate the match ratio
                     _ratio = SequenceMatcher(a=h_entity, b=q_entity).ratio()
-                    # increment heading score by the match ratio
-                    _h_score += _ratio
-                    # if ratio is greater than the accept ratio, increment the hits by 1
+                    # if ratio is greater than the accept ratio, increment q_entity_hits and q_entity_hit_ratio
                     if _ratio >= MessageEngine.ACCEPT_RATIO:
-                        if not _q_e_found:
-                            # increment entity hit counter
-                            q_entity_hits += 1
-                            _q_e_found = True
+                        q_entity_hit_ratio += _ratio
+                        q_entity_hits += 1
 
             # ratio between [#of q_entities found in current heading] and the [total #of q_entities]
-            _hit_ratio = float(q_entity_hits) / len(q_entities)
-            # when going to parent headings, dept_weight decreases in square proportion
-            _depth_weight = float(1) / (h_index + 1)
+            _hit_ratio = (q_entity_hit_ratio / q_entity_hits) if q_entity_hits > 0 else 0
             # ratio between the [length of all entities combined] and the [length of heading]
-            _coherence_factor = float(sum(len(e) for e in q_entities)) / h_length
+            _coherence_factor = sum(len(e) for e in q_entities) / h_length
+            # when going to parent headings, dept_weight decreases in square proportion
+            _depth_weight = 1 / ((h_index + 1) ** 2)
             # calculate a score for current heading and add to total score
-            _weighted_score = _h_score * _hit_ratio * _depth_weight * _coherence_factor
+            _weighted_score = _hit_ratio * _coherence_factor * _depth_weight
             # add weighted score to total score
             _score += _weighted_score
-        return _score
+        return _score * 100
 
     def process_and_answer(self, input_q: str) -> next:
         """
@@ -92,7 +92,6 @@ class MessageEngine:
         :rtype: next
         """
         # if no results come up, return this
-        default_fallback = 'Sorry, I do not know the answer for that.'
 
         # generate parse trees from input text
         for pos_tags in _TextParser.generate_pos_tag_sets(input_q):
@@ -106,17 +105,18 @@ class MessageEngine:
 
             # if no matches found, return the default fallback
             if len(sent_id_matches) == 0:
-                yield (None, '', 0, default_fallback)
+                yield (None, '', 0, MessageEngine.DEFAULT_FEEDBACK)
 
             else:
                 # group sets of sentences under headings, and sort by descending order of heading score
                 scored_matches = []
-                for h_id, h_string, sentence_ids in self.api.group_sentences_by_heading(sent_id_matches):
+                for h_id, h_string, sentence_ids, first_id, last_id in self.api.group_sentences_by_heading(
+                        sent_id_matches):
                     match = (
                         h_id,
                         h_string,
-                        self.__get_heading_score(h_string, q_entities),
-                        self.__merge_adjacent_sent_ids(sentence_ids)
+                        self.__get_heading_score(h_string, q_entities, q_frames),
+                        self.__merge_adjacent_sent_ids(sentence_ids, first_id, last_id)
                     )
                     scored_matches += [match]
                 scored_matches.sort(key=lambda item: item[2], reverse=True)
@@ -128,4 +128,4 @@ class MessageEngine:
                         for index, (sent_id, pos_tags) in enumerate(self.api.get_sentences_by_id(s_ids))
                         if index < MessageEngine.MAX_SENT_PER_GRP
                     ]
-                    yield (heading, get_reference_url(h_id), h_score, str('. '.join(answers) + '.'))
+                    yield (heading, get_reference_url(h_id), h_score, ' '.join(answers))
