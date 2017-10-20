@@ -42,11 +42,12 @@ class MessageEngine:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
             _entities = set()
-            _frames = set()
+            _dependencies = set()
             for pos_tags in _TextParser.generate_pos_tag_sets(_heading):
                 pos_tags = list(pos_tags)
-                for normalized_entities in _TextParser.extract_normalized_entities(pos_tags):
-                    _entities = _entities.union([normalized_entities])
+                entities, dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
+                _entities.update(entities)
+                _dependencies.update(dependencies)
             # add entities and content length to heading_entities as LIFO
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
             yield (_heading, _content_length, _entities)
@@ -96,7 +97,7 @@ class MessageEngine:
         # generate parse trees from input text
         for pos_tags in _TextParser.generate_pos_tag_sets(input_q):
             # get entities frames, and question score from sentence
-            q_entities = _TextParser.extract_normalized_entities(pos_tags)
+            q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
             q_frames = _TextParser.get_frames(pos_tags)
             # q_score = self.msg_parser.calculate_score(parsed_string)
 

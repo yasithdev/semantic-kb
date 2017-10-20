@@ -16,9 +16,7 @@ CA: { <JJR><VB.*>|<RB>?<JJ> }
 AJ: { <CA>(<CC>?<CA>)* }
 
 # Entities
-EN: {<AJ>?<NN.*>+}
-{<AJ>?<FW>+}
-{<AJ|NN><VBG>+<NN.*>?}
+EN: {<AJ>?<NN.*|FW>+}
 
 # Noun-phrases
 NP: {<DT>?<CC>?(<CC><CD>)*<EN>(<CC>?<EN>)*}
@@ -97,19 +95,20 @@ class TextParser:
         return PARSER.parse(Tree('S', (Tree(pos, [t]) for t, pos in pos_tags)))
 
     @staticmethod
-    def extract_normalized_entities(pos_tags: list) -> set:
+    def extract_entities_and_dependencies(pos_tags: list) -> tuple:
         """
     Accepts a **POS Tags list**, extract the entities, and return them in normalized form
     of the entities in a dict
         :param pos_tags: list of pos tags
-        :return: set of normalized entities for the tree
+        :return: set of normalized entities for the tree, and set of important dependencies
         :rtype: Set
         """
         normalized_entities = set()
+        dependencies = set()
         for node in breadth_first(TextParser.generate_parse_tree(pos_tags), maxdepth=1):
             # If noun phrase or verb phrase found
             # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-            # i.pbar. the ENT nodes are traversed after traversing all VPs and NPs
+            # i.e. the ENT nodes are traversed after traversing all VPs and NPs
             if node.label() in ['VP', 'NP']:
                 # traverse each entity and parametrize the phrase
                 for leaf in breadth_first(node, maxdepth=1):
@@ -120,7 +119,7 @@ class TextParser:
                         # Generate entity from tree leaves, and add to normalized_entities
                         for entity in nlp.concat_valid_leaves(leaf.leaves()):
                             normalized_entities.add(nlp.normalize_text(entity))
-        return normalized_entities
+        return normalized_entities, dependencies
 
     @staticmethod
     def extract_sentence(pos_tags: list, preserve_entities=False) -> str:
@@ -143,7 +142,7 @@ class TextParser:
             for node in breadth_first(parse_tree, maxdepth=1):
                 # If noun phrase or verb phrase found
                 # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
-                # i.pbar. the ENT nodes are traversed after traversing all VPs and NPs
+                # i.e. the ENT nodes are traversed after traversing all VPs and NPs
                 if node.label() in ['VP', 'NP']:
                     phrase = ' '.join(node.leaves())
                     # traverse each entity and parametrize the phrase

@@ -28,8 +28,8 @@ class App(Flask):
         self.message_engine = MessageEngine(self.postgres_api)
         self.cache = []
         self.status = 0
-        self.populate_kb_progress = (0, 0)
-        self.populate_frames_progress = (0, 0)
+        self.populate_content_progress = (100, 0)
+        self.populate_frames_progress = (100, 0)
 
         @self.route('/', methods=['GET'])
         def home_page():
@@ -49,8 +49,9 @@ class App(Flask):
                     return json.dumps(data)
                 else:
                     return render_template('content.html', data=data)
-            except BaseException as ex:
-                data = {'error': ex.args}
+            except Exception as ex:
+                data = {'error': ex}
+                print(ex)
                 if is_json:
                     return json.dumps(data)
                 else:
@@ -74,8 +75,9 @@ class App(Flask):
                     })
                 else:
                     return render_template('answers.html', question=question, answers=answers)
-            except BaseException as ex:
-                data = {'error': ex.args}
+            except Exception as ex:
+                data = {'error': ex}
+                print(ex)
                 if is_json:
                     return json.dumps(data)
                 else:
@@ -84,7 +86,7 @@ class App(Flask):
         @self.route('/progress_kb')
         def progress_kb():
             def get_log():
-                p = self.populate_kb_progress
+                p = self.populate_content_progress
                 yield 'data: {"percent": "%s", "remaining" : "%s"}\n\n' % p
 
             return Response(get_log(), mimetype="text/event-stream")
@@ -104,8 +106,12 @@ class App(Flask):
 
                 # method to run a complete init
                 def full_init():
+                    self.populate_content_progress = (0, 0)
+                    self.populate_frames_progress = (0, 0)
                     app_tasks.populate_content(self)
                     app_tasks.populate_frames(self)
+                    self.populate_content_progress = (100, 0)
+                    self.populate_frames_progress = (100, 0)
                     self.status = 0
 
                 Thread(target=full_init).start()

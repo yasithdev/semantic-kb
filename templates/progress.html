@@ -45,10 +45,11 @@
         d = JSON.parse(event.data);
         pbar = document.getElementById('kb-progress');
         ptext = document.getElementById('kb-progress-text');
-        pbar.style = 'width: ' + d.percent + '%;';
-        pbar.innerText = d.percent + '%';
-        ptext.innerText = '(' + d.remaining + ' seconds remaining)';
-        if (d.percent === 100 || d.percent === 0) {
+        pbar.style = 'width: ' + d['percent'] + '%;';
+        pbar.innerText = d['percent'] + '%';
+        ptext.innerText = '(' + d['remaining'] + ' seconds remaining)';
+        if (parseInt(d['percent']) === parseInt(100)) {
+            pbar.classList.add('progress-bar-success');
             kb_event.close()
         }
     };
@@ -57,10 +58,11 @@
         d = JSON.parse(event.data);
         pbar = document.getElementById('frames-progress');
         ptext = document.getElementById('frames-progress-text');
-        pbar.style = 'width: ' + d.percent + '%;';
-        pbar.innerText = d.percent + '%';
-        ptext.innerText = '(' + d.remaining + ' seconds remaining)';
-        if (d.percent === 100 || d.percent === 0) {
+        pbar.style = 'width: ' + d['percent'] + '%;';
+        pbar.innerText = d['percent'] + '%';
+        ptext.innerText = '(' + d['remaining'] + ' seconds remaining)';
+        if (parseInt(d['percent']) === parseInt(100)) {
+            pbar.classList.add('progress-bar-success');
             frame_event.close()
         }
     };

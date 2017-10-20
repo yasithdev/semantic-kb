@@ -27,16 +27,12 @@ RE_ENTITY_SUB_MULTIPLE = re.compile(r'ENTITY(\s+ENTITY)+')
 STANFORD_API = StanfordAPI()
 
 
-def parametrize_entity(entity: str) -> str:
-    return '[%s(@E)]' % entity
-
-
 def normalize_text(text: str, lemmatize: bool = True, ignore_num: bool = False) -> str:
     """
 Normalize the text into **lowercase**, **singular** form
     :param text: input text
     :param lemmatize: default is True. If true, lemmatizes the last word of the text
-    :param ignore_num: default is False. If true, ignores numerics completely
+    :param ignore_num: default is False. If true, ignores numerals completely
     :return: output string
     :rtype: str
     """
@@ -57,7 +53,8 @@ Normalize the text into **lowercase**, **singular** form
     else:
         rightmost_word = rightmost_word[-1]
         lem_word = lemmatizer.lemmatize(rightmost_word) if lemmatize else rightmost_word
-        return RE_SPACES.sub('', text.replace(rightmost_word, lem_word))
+        text = text[::-1].replace(rightmost_word[::-1], lem_word[::-1], 1)[::-1]
+        return RE_SPACES.sub(' ', text.replace(rightmost_word, lem_word))
 
 
 def concat_valid_leaves(leaf_list: list):
@@ -76,6 +73,7 @@ def concat_valid_leaves(leaf_list: list):
         if len(l) > MAX_LEAF_LENGTH and si < i:
             yield from validate_and_yield_entity(leaf_list[si:i])
             si = i + 1
+
     # yield final entity if possible
     if si < len(leaf_list):
         yield from validate_and_yield_entity(leaf_list[si:])
