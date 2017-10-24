@@ -2,6 +2,8 @@ from socket import socket
 
 
 class StanfordAPI:
+    SPLIT_CHAR = '__'
+
     def __init__(self, port: int = 6000, buffer: int = 4096) -> None:
         super().__init__()
         self.host = '127.0.0.1'
@@ -20,4 +22,4 @@ class StanfordAPI:
                 else:
                     result += data
         for x in str(result, 'ascii', 'ignore').strip().split():
-            yield tuple(x.rsplit('_', 1))
+            yield tuple(x.rsplit(self.SPLIT_CHAR, 1))

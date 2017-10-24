@@ -7,23 +7,27 @@ from nltk.stem import WordNetLemmatizer
 from core.api import StanfordAPI
 
 # Constants for reuse
-ENTITY_PLACEHOLDER = 'ENTITY'
-MIN_ENTITY_LENGTH = 2
-MIN_SENT_LENGTH = 4
-MAX_LEAF_LENGTH = 25
-MAX_ENTITY_LENGTH = 100
 ALNUM_THRESHOLD = 0.5
-RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9\s]')
-RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z\s]')
-RE_SPACES = re.compile(r'\s+')
+ENTITY_PLACEHOLDER = 'ENTITY'
+LIST_JUNK = (r'[ie](\s|\.)+[eg](\s|\.|$)+', r'etc(\s|\.|$)+')
+MAX_ENTITY_LENGTH = 100
+MIN_ENTITY_LENGTH = 2
+MAX_LEAF_LENGTH = 25
+MIN_LEAF_LENGTH = 2
+MIN_SENT_LENGTH = 4
 RE_ACRONYM_PLURAL = re.compile(r'(?<=[A-Z])s$')
-RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
-# HTTP header (pbar.g.,"Authorization: Bearer NtBQkXoKElu0H1a1fQ0DWfo6IX4a,") and it
-RE_WORD_TOKENIZE = re.compile(r'[^A-Za-z0-9]*\s+|\s*[^A-Za-z0-9]+|[^A-Za-z0-9]+\s*(?=$)|\s+[^A-Za-z0-9]*(?=$)')
-RE_SENT_TOKENIZE = re.compile(r'.+?(?<=[A-Za-z])[!.?;:]\s*(?=[A-Z]|$)|.+?$')
-RE_ENTITY = re.compile(r'\[(.+?)\(@E\)\]')
 RE_BRACKETS = re.compile(r'\s*-[LR][CSR]B-\s*')
+RE_ENTITY = re.compile(r'\[(.+?)\(@E\)\]')
 RE_ENTITY_SUB_MULTIPLE = re.compile(r'ENTITY(\s+ENTITY)+')
+RE_JUNK = re.compile(r'|'.join(r'(%s)' % x for x in LIST_JUNK))
+RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9\.\s]')
+RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z\.\s]')
+RE_PUNCT = re.compile(r'(\s+[.,()!?\\:])|([.,()!?\\:](\s+|(\s*$)))')
+RE_LINKS = re.compile(r'(http(s)?://)|(<.+?>/)|(:\d{2,})|(^[<{])')
+RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
+RE_SENT_TOKENIZE = re.compile(r'.+?(?<=[A-Za-z])[!.?;:]\s*(?=[A-Z]|$)|.+?$')
+RE_SPACES = re.compile(r'\s+')
+RE_WORD_TOKENIZE = re.compile(r'[^A-Za-z0-9]*\s+|\s*[^A-Za-z0-9]+|[^A-Za-z0-9]+\s*(?=$)|\s+[^A-Za-z0-9]*(?=$)')
 STANFORD_API = StanfordAPI()
 
 
@@ -54,29 +58,25 @@ Normalize the text into **lowercase**, **singular** form
         rightmost_word = rightmost_word[-1]
         lem_word = lemmatizer.lemmatize(rightmost_word) if lemmatize else rightmost_word
         text = text[::-1].replace(rightmost_word[::-1], lem_word[::-1], 1)[::-1]
-        return RE_SPACES.sub(' ', text.replace(rightmost_word, lem_word))
+        text = RE_SPACES.sub(' ', text.replace(rightmost_word, lem_word))
+        return text
 
 
-def concat_valid_leaves(leaf_list: list):
-    def validate_and_yield_entity(leaves: list) -> next:
-        entity = ' '.join(leaves)
-        total_len = len(entity)
-        if MAX_ENTITY_LENGTH >= total_len >= MIN_ENTITY_LENGTH:
-            junk_len = len(RE_NON_ALNUM_SPACE.findall(entity))
-            ratio = 1 - junk_len / total_len
-            if ratio >= ALNUM_THRESHOLD:
-                yield entity
-
-    # when long leaf found, join all leaves up to it and return as one entity
-    si = 0
-    for i, l in enumerate(leaf_list):
-        if len(l) > MAX_LEAF_LENGTH and si < i:
-            yield from validate_and_yield_entity(leaf_list[si:i])
-            si = i + 1
-
-    # yield final entity if possible
-    if si < len(leaf_list):
-        yield from validate_and_yield_entity(leaf_list[si:])
+def yield_valid_entities(leaf_list: list):
+    # run pos tagger again and only extract most relevant part
+    # Step 1 - Drop Links and Short/Long Leaves
+    leaf_list = [
+        y for y in (RE_JUNK.sub('', x).strip() for x in leaf_list if not RE_LINKS.search(x))
+        if MAX_LEAF_LENGTH >= len(y) >= MIN_LEAF_LENGTH
+    ]
+    # Step 3 - Split by punctuations, and ignore too long or too entities
+    entity_list = [
+        x for x in (y.strip() for y in RE_PUNCT.split(' '.join(leaf_list)) if y is not None) if
+        x != ''
+        and MAX_ENTITY_LENGTH >= len(x) >= MIN_ENTITY_LENGTH
+        and len(RE_NON_ALPHA_SPACE.findall(x)) / len(x) < ALNUM_THRESHOLD
+    ]
+    yield from entity_list
 
 
 def get_wordnet_pos(treebank_tag: str) -> str:

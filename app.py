@@ -13,8 +13,10 @@ from core.services import StanfordServer
 API_COMMANDS = [
     {'url': '/', 'request': 'GET', 'function': 'This Page'},
     {'url': '/content', 'request': 'GET', 'function': 'Ask Question'},
-    {'url': '/init', 'request': 'GET', 'function': 'Populate KB'},
+    {'url': '/content', 'request': 'POST', 'function': 'Ask Question Through WebHook'},
+    {'url': '/populate', 'request': 'GET', 'function': 'Populate KB'},
     {'url': '/display', 'request': 'GET', 'function': 'Display KB Content'},
+    {'url': '/progress', 'request': 'GET', 'function': 'Display Populate Progress'},
 ]
 
 
@@ -75,7 +77,7 @@ class App(Flask):
                     })
                 else:
                     return render_template('answers.html', question=question, answers=answers)
-            except Exception as ex:
+            except IOError as ex:
                 data = {'error': ex}
                 print(ex)
                 if is_json:
@@ -87,7 +89,7 @@ class App(Flask):
         def progress_kb():
             def get_log():
                 p = self.populate_content_progress
-                yield 'data: {"percent": "%s", "remaining" : "%s"}\n\n' % p
+                yield 'data: {"percent": "%d", "remaining" : "%d"}\n\n' % p
 
             return Response(get_log(), mimetype="text/event-stream")
 
@@ -99,8 +101,8 @@ class App(Flask):
 
             return Response(get_log(), mimetype="text/event-stream")
 
-        @self.route('/init', methods=['GET'])
-        def init():
+        @self.route('/populate', methods=['GET'])
+        def populate():
             if self.status != 1:
                 self.status = 1
 
@@ -109,8 +111,8 @@ class App(Flask):
                     self.populate_content_progress = (0, 0)
                     self.populate_frames_progress = (0, 0)
                     app_tasks.populate_content(self)
-                    app_tasks.populate_frames(self)
                     self.populate_content_progress = (100, 0)
+                    app_tasks.populate_frames(self)
                     self.populate_frames_progress = (100, 0)
                     self.status = 0
 

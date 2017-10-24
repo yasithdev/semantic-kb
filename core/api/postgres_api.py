@@ -3,10 +3,12 @@ import pg8000 as psql
 ERROR_TOLERANCE = 5
 MAX_ENTITY_LENGTH = 50
 ROOT_NODE_NAME = 'ROOT'
+SPLIT_CHAR = '__'
 
 
-def str_conv(iterable: iter, start: str = '{', end: str = '}') -> str:
-    return "%s%s%s" % (start, '' if len(iterable) > 0 else str(iterable)[1:-1], end)
+def str_conv(iterable: list, start: str = '{', end: str = '}') -> str:
+    result = "%s%s%s" % (start, '' if len(iterable) == 0 else str(iterable)[1:-1], end)
+    return result
 
 
 class PostgresAPI:
@@ -183,7 +185,7 @@ class PostgresAPI:
         self.cursor.execute('''
             INSERT INTO semantic_kb.sentences (sentence, dependencies, heading_id) VALUES (?,?,?) 
             ON CONFLICT (sentence, heading_id) DO UPDATE SET sentence = EXCLUDED.sentence 
-            RETURNING sentence_id''', [sentence, str_conv(dependencies), heading_id])
+            RETURNING sentence_id''', [sentence, str_conv(list(dependencies)), heading_id])
         sentence_id = self.cursor.fetchone()[0]
 
         # Insert normalized entities into database, along with the normalization
@@ -227,12 +229,12 @@ class PostgresAPI:
             # get the sentence text and return the output as a list
             row = self.cursor.fetchone()
             if row is not None:
-                yield (row[0], (tuple(str.rsplit(tag, '_', 1)) for tag in row[1].split()))
+                yield (row[0], (tuple(str.rsplit(tag, SPLIT_CHAR, 1)) for tag in row[1].split()))
 
     def get_all_sentences(self) -> next:
         self.cursor.execute('SELECT sentence_id, sentence FROM semantic_kb.sentences')
         for row in self.cursor.fetchall():
-            yield (row[0], (tuple(str.rsplit(tag, '_', 1)) for tag in row[1].split()))
+            yield (row[0], (tuple(str.rsplit(tag, SPLIT_CHAR, 1)) for tag in row[1].split()))
 
     def get_sentence_count(self) -> int:
         self.cursor.execute('SELECT count(sentence_id) FROM semantic_kb.sentences')
@@ -246,7 +248,7 @@ class PostgresAPI:
 
         # Get the entity ids of all entities matching the input entities
         def get_matching_entity_ids(input_entities: set) -> set:
-            matching_entity_ids = set()
+            matching_entity_ids = set([])
             for entity in input_entities:
                 # execute direct string match
                 self.cursor.execute('''
@@ -277,7 +279,7 @@ class PostgresAPI:
                 return set([])
             entity_param = str(input_entity_ids)[1:-1]
             self.cursor.execute('''SELECT DISTINCT sentence_id FROM semantic_kb.normalizations 
-                                WHERE entity_id IN (?)''', format(entity_param))
+                                WHERE entity_id IN ({0})'''.format(entity_param))
             return set([int(row[0]) for row in self.cursor.fetchall()])
 
         # Get the sentence ids of the entity-matching sentences that match the input frames
@@ -345,5 +347,5 @@ class PostgresAPI:
             return {
                 'heading_id': row[0],
                 'heading': row[1],
-                'content': ((tuple(str.rsplit(tag, '_', 1)) for tag in sent.split()) for sent in row[2])
+                'content': ((tuple(str.rsplit(tag, SPLIT_CHAR, 1)) for tag in sent.split()) for sent in row[2])
             }

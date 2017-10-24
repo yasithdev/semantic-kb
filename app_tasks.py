@@ -6,6 +6,7 @@ from core.engine import doc_engine
 from core.parsers import TextParser
 
 SMOOTHING_FACTOR = 0.05
+SPLIT_CHAR = '__'
 
 
 def __process_content(app: App, headings: list, sentences: list):
@@ -14,7 +15,7 @@ def __process_content(app: App, headings: list, sentences: list):
         for sentence in sents:
             for pos_tags in TextParser.generate_pos_tag_sets(sentence):
                 entities, dependencies = TextParser.extract_entities_and_dependencies(pos_tags)
-                sentence = ' '.join(('%s_%s' % (token, pos) for token, pos in pos_tags))
+                sentence = ' '.join(('%s%s%s' % (token, SPLIT_CHAR, pos) for token, pos in pos_tags))
                 # add result to cache
                 app.cache += [(sentence, entities, dependencies, heading_id)]
 

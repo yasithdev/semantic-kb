@@ -117,8 +117,10 @@ class TextParser:
                         continue
                     else:
                         # Generate entity from tree leaves, and add to normalized_entities
-                        for entity in nlp.concat_valid_leaves(leaf.leaves()):
-                            normalized_entities.add(nlp.normalize_text(entity))
+                        for entity in nlp.yield_valid_entities(leaf.leaves()):
+                            entity = nlp.normalize_text(entity)
+                            if entity != '':
+                                normalized_entities.add(entity)
         return normalized_entities, dependencies
 
     @staticmethod

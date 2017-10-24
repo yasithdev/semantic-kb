@@ -5,6 +5,7 @@ class StanfordServer:
     LEFT3WORDS_PATH = './lib/english-left3words-distsim.tagger'
     BIDIRECTIONAL_PATH = './lib/english-bidirectional-distsim.tagger'
     JAR_PATH = './lib/stanford-postagger.jar'
+    SPLIT_CHAR = '__'
 
     def __init__(self, jar_path: str = JAR_PATH, model_path: str = LEFT3WORDS_PATH, port: int = 6000) -> None:
         super().__init__()
@@ -17,8 +18,9 @@ class StanfordServer:
         # Start Stanford Server
         print('Starting Stanford Server on Port %d ...' % self.port, end='', flush=True)
         self.subprocess = subprocess.Popen(
-            ('java', '-mx500m', '-cp', self.jar_path, self.classpath, '-model', self.model_path, '-port',
-             str(self.port), '-sentenceDelimiter', 'newline', '-tokenize', 'false'), stderr=subprocess.STDOUT,
+            ('java', '-mx2g', '-cp', self.jar_path, self.classpath, '-model', self.model_path, '-port',
+             str(self.port), '-sentenceDelimiter', 'newline', '-tokenize', 'false',
+             '-outputFormat', 'slashTags', '-tagSeparator', self.SPLIT_CHAR), stderr=subprocess.STDOUT,
             stdout=subprocess.PIPE)
         status = True
         # Wait while Server is Started, or terminate if error occurred

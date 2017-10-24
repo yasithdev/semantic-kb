@@ -41,8 +41,8 @@ class MessageEngine:
         for _heading in headings:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
-            _entities = set()
-            _dependencies = set()
+            _entities = set([])
+            _dependencies = set([])
             for pos_tags in _TextParser.generate_pos_tag_sets(_heading):
                 pos_tags = list(pos_tags)
                 entities, dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
@@ -95,7 +95,8 @@ class MessageEngine:
         # if no results come up, return this
 
         # generate parse trees from input text
-        for pos_tags in _TextParser.generate_pos_tag_sets(input_q):
+        for pos_tags in _TextParser.generate_pos_tag_sets(input_q.strip('?.,:\n')):
+            print(pos_tags)
             # get entities frames, and question score from sentence
             q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
             q_frames = _TextParser.get_frames(pos_tags)
