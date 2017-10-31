@@ -1,7 +1,7 @@
 import re
 from difflib import SequenceMatcher
 
-from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser)
+from core.parsers import (MessageParser as _MessageParser, TextParser as _TextParser, nlp)
 
 
 def get_reference_url(h_id: int) -> str:
@@ -11,7 +11,7 @@ def get_reference_url(h_id: int) -> str:
 
 class MessageEngine:
     MAX_SENT_PER_GRP = 5
-    MAX_GRP_PER_ANS = 10
+    MAX_GRP_PER_ANS = 100
     ACCEPT_RATIO = 0.75
     RE_ALPHANUMERIC = re.compile(r'[^A-Za-z0-9]')
     DEFAULT_FEEDBACK = "Sorry, I don't know the answer for that."
@@ -36,7 +36,7 @@ class MessageEngine:
                 yield from range(e + 1, min([e + MessageEngine.MAX_SENT_PER_GRP, last + 1]))
 
     @staticmethod
-    def _extract_heading_entities(headings: list) -> next:
+    def __extract_heading_entities(headings: list) -> next:
         # assign headings as a 2D list of entities extracted from headings
         for _heading in headings:
             # assuming only one sentence
@@ -52,10 +52,11 @@ class MessageEngine:
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
             yield (_heading, _content_length, _entities)
 
-    def __get_heading_score(self, heading_string: str, q_entities: set, q_frames: set) -> float:
+    @staticmethod
+    def __get_heading_score(heading_string: str, q_entities: set, q_frames: set) -> float:
         _score = 0
         # get the heading entities and print it
-        _heading_entities = self._extract_heading_entities(heading_string.split(' > ')[::-1])
+        _heading_entities = MessageEngine.__extract_heading_entities(heading_string.split(' > ')[::-1])
         # calculate entity matching score for entities in each heading
         for h_index, (heading, h_length, h_entities) in enumerate(_heading_entities):
             # match entities of current heading against question entities
@@ -85,6 +86,11 @@ class MessageEngine:
             _score += _weighted_score
         return _score * 100
 
+    @staticmethod
+    def __expand_entities(src_entities: set) -> next:
+        for x in src_entities:
+            yield tuple(nlp.get_ngrams(str.split(x)))
+
     def process_and_answer(self, input_q: str) -> next:
         """
     Extract the semantic meaning of a question, and produce a valid list of outputs with a relevance score
@@ -100,25 +106,28 @@ class MessageEngine:
             # get entities frames, and question score from sentence
             q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
             q_frames = _TextParser.get_frames(pos_tags)
+            q_entities_expanded = {entity: list(MessageEngine.__expand_entities(q_entities)) for entity in q_entities}
             # q_score = self.msg_parser.calculate_score(parsed_string)
 
             # query for matches in database
-            sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
+            print(q_entities_expanded)
+            grouped_sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
 
             # if no matches found, return the default fallback
-            if len(sent_id_matches) == 0:
+            if len(grouped_sent_id_matches) == 0:
                 yield (None, '', 0, MessageEngine.DEFAULT_FEEDBACK)
 
             else:
                 # group sets of sentences under headings, and sort by descending order of heading score
                 scored_matches = []
-                for h_id, h_string, sentence_ids, first_id, last_id in self.api.group_sentences_by_heading(
-                        sent_id_matches):
+                for h_id in grouped_sent_id_matches:
+                    sent_ids = grouped_sent_id_matches[h_id]
+                    h_hierarchy, min_id, max_id = self.api.get_heading_info_by_id(h_id)
                     match = (
                         h_id,
-                        h_string,
-                        self.__get_heading_score(h_string, q_entities, q_frames),
-                        self.__merge_adjacent_sent_ids(sentence_ids, first_id, last_id)
+                        h_hierarchy,
+                        self.__get_heading_score(h_hierarchy, q_entities, q_frames),
+                        self.__merge_adjacent_sent_ids(sent_ids, min_id, max_id)
                     )
                     scored_matches += [match]
                 scored_matches.sort(key=lambda item: item[2], reverse=True)

@@ -1,6 +1,7 @@
 import re
 from collections import Generator
 
+from nltk import ngrams
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 
@@ -15,14 +16,15 @@ MIN_ENTITY_LENGTH = 2
 MAX_LEAF_LENGTH = 25
 MIN_LEAF_LENGTH = 2
 MIN_SENT_LENGTH = 4
-RE_ACRONYM_PLURAL = re.compile(r'(?<=[A-Z])s$')
+RE_PLURAL_DROP = re.compile(r'(?<=[A-Ze])(s)$')
+RE_PLURAL_Y = re.compile(r'(?<=[A-Za-z])(ies)$')
 RE_BRACKETS = re.compile(r'\s*-[LR][CSR]B-\s*')
 RE_ENTITY = re.compile(r'\[(.+?)\(@E\)\]')
 RE_ENTITY_SUB_MULTIPLE = re.compile(r'ENTITY(\s+ENTITY)+')
 RE_JUNK = re.compile(r'|'.join(r'(%s)' % x for x in LIST_JUNK))
-RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9\.\s]')
-RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z\.\s]')
-RE_PUNCT = re.compile(r'(\s+[.,()!?\\:])|([.,()!?\\:](\s+|(\s*$)))')
+RE_NON_ALNUM_SPACE = re.compile(r'[^A-Za-z0-9.\s]')
+RE_NON_ALPHA_SPACE = re.compile(r'[^A-Za-z.\s]')
+RE_PUNCT = re.compile(r'(\s+[.,()!?\\:]\s*)|(\s*[.,()!?\\:](\s+|(\s*$)))')
 RE_LINKS = re.compile(r'(http(s)?://)|(<.+?>/)|(:\d{2,})|(^[<{])')
 RE_RIGHTMOST_WORD = re.compile(r'(?<=\s)(\w+)$')
 RE_SENT_TOKENIZE = re.compile(r'.+?(?<=[A-Za-z])[!.?;:]\s*(?=[A-Z]|$)|.+?$')
@@ -41,8 +43,9 @@ Normalize the text into **lowercase**, **singular** form
     :rtype: str
     """
     lemmatizer = WordNetLemmatizer()
-    # remove plurals from acronyms
-    text = RE_ACRONYM_PLURAL.sub('', text)
+    # remove plurals from entities
+    text = RE_PLURAL_DROP.sub('', text)
+    text = RE_PLURAL_Y.sub('y', text)
     # remove all non-alphanumeric/space characters
     text = RE_NON_ALPHA_SPACE.sub(' ', text) if ignore_num else RE_NON_ALNUM_SPACE.sub(' ', text)
     # remove extra spaces, strip, and lowercase
@@ -71,7 +74,7 @@ def yield_valid_entities(leaf_list: list):
     ]
     # Step 3 - Split by punctuations, and ignore too long or too entities
     entity_list = [
-        x for x in (y.strip() for y in RE_PUNCT.split(' '.join(leaf_list)) if y is not None) if
+        x.strip('. ') for x in (y.strip() for y in RE_PUNCT.split(' '.join(leaf_list)) if y is not None) if
         x != ''
         and MAX_ENTITY_LENGTH >= len(x) >= MIN_ENTITY_LENGTH
         and len(RE_NON_ALPHA_SPACE.findall(x)) / len(x) < ALNUM_THRESHOLD
@@ -121,3 +124,8 @@ Accepts a string containing *multiple* sentences, and return a list of sentences
         x.strip() for x in RE_SENT_TOKENIZE.findall(in_str)
         if x.strip() != '' and not len(x.strip()) < MIN_SENT_LENGTH
     )
+
+
+def get_ngrams(tokens: list, min_n: int = 1):
+    for i in range(len(tokens) - 1, min_n - 1, -1):
+        yield list(' '.join(grams) for grams in ngrams(tokens, i))

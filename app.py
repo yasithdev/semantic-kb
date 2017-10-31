@@ -115,6 +115,7 @@ class App(Flask):
                     app_tasks.populate_frames(self)
                     self.populate_frames_progress = (100, 0)
                     self.status = 0
+                    app_tasks.finalize()
 
                 Thread(target=full_init).start()
             return redirect('/progress')

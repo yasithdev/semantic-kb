@@ -178,7 +178,7 @@ class TextParser:
             entity_sanitized_sent = nlp.RE_ENTITY_SUB_MULTIPLE.sub(nlp.ENTITY_PLACEHOLDER,
                                                                    entity_sanitized_sent).strip()
 
-        # add a fullstop if sentence does not end with a punctuation
+        # add a period if sentence does not end with a punctuation
         if entity_sanitized_sent[-1] not in '!;:.':
             entity_sanitized_sent += '.'
 
