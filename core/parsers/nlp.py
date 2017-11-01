@@ -126,6 +126,8 @@ Accepts a string containing *multiple* sentences, and return a list of sentences
     )
 
 
-def get_ngrams(tokens: list, min_n: int = 1):
-    for i in range(len(tokens) - 1, min_n - 1, -1):
-        yield list(' '.join(grams) for grams in ngrams(tokens, i))
+def get_ngrams(phrase: str, min_n: int = 1):
+    tokens = phrase.split()
+    if len(tokens) > min_n:
+        for i in range(len(tokens) - 1, min_n - 1, -1):
+            yield [' '.join(grams) for grams in ngrams(tokens, i)]

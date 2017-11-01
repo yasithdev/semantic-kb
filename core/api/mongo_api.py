@@ -19,7 +19,7 @@ class MongoAPI:
         self.db = self.client[self.mongo_db]
 
     def get_all_documents(self, collection_name: str) -> next:
-        return self.db[collection_name].find()
+        return self.db[collection_name].find().batch_size(10)
 
     def get_document_count(self, collection_name: str) -> int:
         return self.db[collection_name].count()

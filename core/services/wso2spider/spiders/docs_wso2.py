@@ -12,8 +12,39 @@ class DocsWso2Spider(CrawlSpider):
     name = 'docs.wso2'
     allowed_domains = ['docs.wso2.com']
     doc_urls = [
-        'AM210', 'ApiCloud', 'EI611', 'EIP', 'IntegrationCloud', 'IS530', 'IdentityCloud', 'DAS310', 'IOTS310',
-        'DeviceCloud'
+        'AM210',
+        'ApiCloud',
+        'EI611',
+        'EIP',
+        'IntegrationCloud',
+        'IS530',
+        'IdentityCloud',
+        'DAS310',
+        'IOTS310',
+        'DeviceCloud',
+        'OpenBanking',
+        'KA100',
+        'MA100',
+        'PM210',
+        'DF120',
+        'ESBCONNECTORS',
+        'ISCONNECTORS',
+        'ANALYTICSEXTENSIONS',
+        'SIDDHIEXTENSIONS',
+        'ManagedCloud',
+        'Governance540',
+        'ADMIN44x',
+        'CLUSTER44x',
+        'AS530',
+        'GS140',
+        'AF210',
+        'CG100',
+        'PP411',
+        'CARBON4411',
+        'MB320',
+        'APPM120',
+        'ES210',
+        'DVS380'
     ]
     start_urls = [str('https://docs.wso2.com/display/' + p) for p in doc_urls]
     # declare xpath variables

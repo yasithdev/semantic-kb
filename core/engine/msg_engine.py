@@ -87,9 +87,8 @@ class MessageEngine:
         return _score * 100
 
     @staticmethod
-    def __expand_entities(src_entities: set) -> next:
-        for x in src_entities:
-            yield tuple(nlp.get_ngrams(str.split(x)))
+    def __expand_entities(src_entities: set) -> dict:
+        return {x: list(nlp.get_ngrams(x)) for x in src_entities}
 
     def process_and_answer(self, input_q: str) -> next:
         """
@@ -106,12 +105,12 @@ class MessageEngine:
             # get entities frames, and question score from sentence
             q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
             q_frames = _TextParser.get_frames(pos_tags)
-            q_entities_expanded = {entity: list(MessageEngine.__expand_entities(q_entities)) for entity in q_entities}
+            q_entities_enhanced = MessageEngine.__expand_entities(q_entities)
             # q_score = self.msg_parser.calculate_score(parsed_string)
 
             # query for matches in database
-            print(q_entities_expanded)
-            grouped_sent_id_matches = self.api.query_sentence_ids(q_entities, q_frames)
+            print(q_entities_enhanced)
+            grouped_sent_id_matches = self.api.query_sentence_ids(q_entities_enhanced, q_frames)
 
             # if no matches found, return the default fallback
             if len(grouped_sent_id_matches) == 0:

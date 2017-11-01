@@ -110,7 +110,7 @@ class App(Flask):
                 def full_init():
                     self.populate_content_progress = (0, 0)
                     self.populate_frames_progress = (0, 0)
-                    app_tasks.populate_content(self)
+                    # app_tasks.populate_content(self)
                     self.populate_content_progress = (100, 0)
                     app_tasks.populate_frames(self)
                     self.populate_frames_progress = (100, 0)

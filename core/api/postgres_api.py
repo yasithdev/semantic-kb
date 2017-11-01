@@ -247,42 +247,47 @@ class PostgresAPI:
         self.cursor.execute('SELECT entity_id, entity FROM entities ORDER BY entity')
         return self.cursor.fetchall()
 
-    def query_sentence_ids(self, entities: set, frames: set) -> dict:
+    def query_sentence_ids(self, entities: dict, frames: set) -> dict:
         """
         Accepts a set of entities, a set of frames, and a filtering algorithm to generate a set of sentence id groups
         that match all constraints
 
-        :param entities:
-        :param frames:
+        :param entities: Dictionary containing the entity as key, and possible ngrams as the value (use them if needed)
+        :param frames: Set of question frames
         :return: sets of potential sentence ids that could be the answer
         """
 
         # Get the entity ids matching the input entities as a dict of entity --> its direct/fuzzy matches
-        def get_matching_entity_ids(input_entities: set) -> dict:
-            matching_entity_ids = {}
+        def get_matching_entity_ids(input_entities: dict) -> dict:
+            entity_ids = {}
+            q_string = '''
+            SELECT 
+              entity_id, 
+              length(entity) entity_length,
+              levenshtein(entity, '{0}', 2, 1, 2) edit_distance
+            FROM 
+              entities
+            WHERE
+              (length(entity) BETWEEN length('{0}') AND {1})
+            AND (
+              entity LIKE '{0}%%' 
+              OR entity LIKE '%%{0}' 
+              OR levenshtein(entity, '{0}', 2, 1, 2) < {2}
+            ) 
+            ORDER BY entity_length ASC, edit_distance ASC LIMIT 3
+            '''
             for entity in input_entities:
+                entity_ids[entity] = []
                 # execute direct string match
-                self.cursor.execute('''
-                    SELECT 
-                      entity_id, 
-                      length(entity) entity_length,
-                      levenshtein(entity, '{0}', 2, 1, 2) edit_distance
-                    FROM 
-                      entities
-                    WHERE
-                      length(entity) < {1}
-                    AND 
-                      length(entity) >= length('{0}')
-                    AND (
-                      entity LIKE '{0}%%' 
-                      OR entity LIKE '%%{0}' 
-                      OR levenshtein(entity, '{0}', 2, 1, 2) < {2}
-                    ) 
-                    ORDER BY entity_length ASC, edit_distance ASC LIMIT 3
-                    '''.format(entity, MAX_ENTITY_LENGTH, ERROR_TOLERANCE))
+                self.cursor.execute(q_string.format(entity, MAX_ENTITY_LENGTH, ERROR_TOLERANCE))
                 # get set of rows and append to matching_entity_ids set
-                matching_entity_ids[entity] = [int(row[0]) for row in self.cursor.fetchall()]
-            return matching_entity_ids
+                entity_ids[entity] += [int(row[0]) for row in self.cursor.fetchall()]
+                # check if any results returned. If not, go through all ngrams as well
+                for ngrams in input_entities[entity]:
+                    for ngram in ngrams:
+                        self.cursor.execute(q_string.format(ngram, MAX_ENTITY_LENGTH, ERROR_TOLERANCE))
+                        entity_ids[entity] += [int(row[0]) for row in self.cursor.fetchall()]
+            return entity_ids
 
         # Get the sentence ids of the sentences containing the passed entity ids
         def get_entity_matching_sent_ids(input_entities: dict) -> dict:
@@ -341,6 +346,13 @@ class PostgresAPI:
             else:
                 frame_param = str(input_frames)[1:-1]
                 sent_param = str(sent_ids)[1:-1]
+                # self.cursor.execute('''
+                #     SELECT count(DISTINCT F.frame) FROM
+                #       (SELECT DISTINCT frame, unnest(sentence_ids) AS sentence_id FROM frames) AS F
+                #     WHERE
+                #       F.frame IN ({0}) AND
+                #       F.sentence_id IN ({1})
+                # '''.format(frame_param, sent_param))
                 self.cursor.execute('''
                     SELECT count(DISTINCT F.frame) FROM
                       (SELECT DISTINCT frame, unnest(sentence_ids) AS sentence_id FROM frames) AS F
