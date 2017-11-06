@@ -26,3 +26,11 @@ class MongoAPI:
 
     def insert_document(self, collection_name: str, document: dict):
         self.db[collection_name].insert_one(document)
+
+    def load_frame_cache(self, collection_name: str):
+        result = self.db[collection_name].find_one()
+        return dict(result) if result is not None else dict()
+
+    def persist_frame_cache(self, collection_name: str, frame_cache: dict):
+        self.db[collection_name].drop()
+        self.db[collection_name].insert_one(frame_cache)

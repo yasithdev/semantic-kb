@@ -45,11 +45,10 @@ class TextParser:
         return (list(nlp.pos_tag(sentence)) for sentence in nlp.sent_tokenize(input_string))
 
     @staticmethod
-    def get_frames(pos_tags: Iterable) -> set:
+    def get_frames(pos_tags: Iterable, frame_cache: dict) -> set:
         results = set()
 
         # iterate through each token, and create a dict of token -> words
-        search_words = {}
         for token, pos in pos_tags:
 
             search_word = token.lower()
@@ -73,20 +72,26 @@ class TextParser:
                 search_word = lemma
 
             # Get lexical units matching the search word and pos
-            search_word = re.escape(search_word)
-            # update search_words dict
-            search_words[pos] = search_words.get(pos, []) + [search_word]
+            search_word = nlp.normalize_text(search_word, lemmatize=False, ignore_num=True).replace('.', '')
 
-        # for each pos tag, query frame-net database and return results
-        lex_units = fn.lus(
-            r'(?i)' +
-            # regex for all search words, of all pos tag types
-            '|'.join(
-                r'(^|\s)%s(\s.+)?\.%s' % ('|'.join(set(search_words[pos])), pos) for pos in dict.keys(search_words)
-            )
-        )
+            # Load frames for missing tokens from FrameNet if it does not exist in cache
+            key = '%s__%s' % (search_word, pos)
+            if key not in frame_cache:
+                frame_cache[key] = sorted(
+                    set(lu.frame.name for lu in fn.lus(r'(^|\s)(%s)(\s.+)?\.%s' % (search_word, pos))))
+
+            # add the frames from current key to the results set
+            results.update(frame_cache[key])
+        # lex_units = fn.lus(
+        #     r'(?i)' +
+        #     # regex for all search words, of all pos tag types
+        #     r'|'.join(
+        #         r'(^|\s)(%s)(\s.+)?\.%s' % (r'|'.join(set(search_words[pos])), pos)
+        #         for pos in dict.keys(search_words)
+        #     )
+        # )
         # If lex units matched, add them to results
-        results.update((lexUnit.frame.name for lexUnit in lex_units))
+        # results.update((lexUnit.frame.name for lexUnit in frames))
         print('Frames: %d' % len(results))
         return results
 

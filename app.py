@@ -26,8 +26,9 @@ class App(Flask):
         self.config['SECRET_KEY'] = config.saml['secret_key']
         self.config['SAML_PATH'] = config.saml['saml_path']
         self.mongo_api = MongoAPI()
+        self.frame_dict = self.mongo_api.load_frame_cache(self.mongo_api.FRAMES)
         self.postgres_api = PostgresAPI(database="semantic_kb")
-        self.message_engine = MessageEngine(self.postgres_api)
+        self.message_engine = MessageEngine(self.postgres_api, self.frame_dict)
         self.cache = []
         self.status = 0
         self.populate_content_progress = (100, 0)
@@ -110,7 +111,7 @@ class App(Flask):
                 def full_init():
                     self.populate_content_progress = (0, 0)
                     self.populate_frames_progress = (0, 0)
-                    # app_tasks.populate_content(self)
+                    app_tasks.populate_content(self)
                     self.populate_content_progress = (100, 0)
                     app_tasks.populate_frames(self)
                     self.populate_frames_progress = (100, 0)

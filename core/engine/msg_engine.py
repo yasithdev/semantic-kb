@@ -16,18 +16,21 @@ class MessageEngine:
     RE_ALPHANUMERIC = re.compile(r'[^A-Za-z0-9]')
     DEFAULT_FEEDBACK = "Sorry, I don't know the answer for that."
 
-    def __init__(self, api) -> None:
+    def __init__(self, api, frame_dict) -> None:
         super().__init__()
         self.msg_parser = _MessageParser()
+        self.frame_dict = frame_dict
         self.api = api
 
     @staticmethod
     def __merge_adjacent_sent_ids(s: set, first: int, last: int) -> next:
         # sort the sentence ids
         s = sorted(s)
-        print(s)
         # logic
         for i, e in enumerate(s):
+            # If starting sentence is close to first sentence, yield the first sentences too
+            if i == 0 and MessageEngine.MAX_SENT_PER_GRP > (e - first) > 0:
+                yield from range(first, e)
             yield e
             # yield up to MAX_SENT_PER_GRP sentences after current sentence.
             if i + 1 < len(s) and s[i + 1] - e <= MessageEngine.MAX_SENT_PER_GRP:
@@ -104,7 +107,7 @@ class MessageEngine:
             print(pos_tags)
             # get entities frames, and question score from sentence
             q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
-            q_frames = _TextParser.get_frames(pos_tags)
+            q_frames = _TextParser.get_frames(pos_tags, self.frame_dict)
             q_entities_enhanced = MessageEngine.__expand_entities(q_entities)
             # q_score = self.msg_parser.calculate_score(parsed_string)
 
@@ -119,18 +122,20 @@ class MessageEngine:
             else:
                 # group sets of sentences under headings, and sort by descending order of heading score
                 scored_matches = []
+                print('Rating Answers...')
+                heading_info = self.api.get_heading_info_by_ids(grouped_sent_id_matches.keys())
                 for h_id in grouped_sent_id_matches:
                     sent_ids = grouped_sent_id_matches[h_id]
-                    h_hierarchy, min_id, max_id = self.api.get_heading_info_by_id(h_id)
-                    match = (
+                    h_string, min_id, max_id = heading_info[h_id]
+                    match = [
                         h_id,
-                        h_hierarchy,
-                        self.__get_heading_score(h_hierarchy, q_entities, q_frames),
+                        h_string,
+                        self.__get_heading_score(h_string, q_entities, q_frames),
                         self.__merge_adjacent_sent_ids(sent_ids, min_id, max_id)
-                    )
+                    ]
                     scored_matches += [match]
+                print('Rating Completed!')
                 scored_matches.sort(key=lambda item: item[2], reverse=True)
-
                 # Merge nearby sentences and yield merged_matches
                 for (h_id, heading, h_score, s_ids) in scored_matches[:MessageEngine.MAX_GRP_PER_ANS]:
                     answers = [

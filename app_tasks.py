@@ -79,14 +79,15 @@ def populate_frames(app: App):
     start_time = datetime.now()
     timestamp = start_time
     count = POSTGRES_API.get_sentence_count()
-
+    app.frame_dict = app.mongo_api.load_frame_cache(app.mongo_api.FRAMES)
     for i, (sentence_id, sentence_pos) in enumerate(POSTGRES_API.get_all_sentences()):
-        sent_frames = TextParser.get_frames(sentence_pos)
+        sent_frames = TextParser.get_frames(sentence_pos, app.frame_dict)
         POSTGRES_API.insert_frames(sentence_id, sent_frames)
         timestamp, percent, est_time = __calculate_progress(i + 1, count, start_time, timestamp)
         app.populate_frames_progress = (percent, est_time)
     # commit changes to KB
     POSTGRES_API.conn.commit()
+    app.mongo_api.persist_frame_cache(app.mongo_api.FRAMES, app.frame_dict)
     completion_time = datetime.now()
     app.populate_frames_progress = (100, 0)
     print('Done! (time taken: %s seconds)' % (completion_time - start_time).seconds)

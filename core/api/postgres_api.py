@@ -4,6 +4,7 @@ ERROR_TOLERANCE = 5
 MAX_ENTITY_LENGTH = 50
 ROOT_NODE_NAME = 'ROOT'
 SPLIT_CHAR = '__'
+MIN_RESULT_COUNT = 3
 
 
 def str_conv(iterable: list, start: str = '{', end: str = '}') -> str:
@@ -21,6 +22,9 @@ class PostgresAPI:
         self.cursor = self.conn.cursor()
         self.cursor.execute('''SET SEARCH_PATH TO {0}'''.format(self.schema_name))
         self.autocommit = False
+        if self.maintenance:
+            self.create_schema()
+            self.conn.commit()
 
     def initialize_db(self):
         self.drop_schema()
@@ -74,12 +78,15 @@ class PostgresAPI:
             )''')
 
         # Add Fuzzy String match extensions for schema
-        cursor.execute('''CREATE EXTENSION IF NOT EXISTS fuzzystrmatch WITH SCHEMA {0}'''.format(self.schema_name))
+        cursor.execute('''CREATE EXTENSION IF NOT EXISTS fuzzystrmatch SCHEMA semantic_kb''')
 
         # Add ROOT Record for Headings. Every heading maps to this (To avoid foreign key violations)
-        cursor.execute('''
-          INSERT INTO headings (heading, parent_id) 
-          VALUES (?, NULL)''', [ROOT_NODE_NAME])
+        cursor.execute('''SELECT EXISTS(SELECT heading_id FROM headings WHERE heading_id = 1)''')
+        if not cursor.fetchone()[0]:
+            cursor.execute('''
+              INSERT INTO headings (heading, parent_id) 
+              VALUES (?, NULL) 
+              ON CONFLICT (heading_id) DO NOTHING ''', [ROOT_NODE_NAME])
 
         # Add Function to get heading hierarchy
         cursor.execute('''
@@ -173,7 +180,7 @@ class PostgresAPI:
         heading_id = self.cursor.fetchone()[0]
         if self.autocommit:
             self.conn.commit()
-        return int(heading_id if heading_id else 1)
+        return int(heading_id)
 
     def insert_headings(self, headings: list) -> int:
         current_parent = None
@@ -256,15 +263,16 @@ class PostgresAPI:
         :param frames: Set of question frames
         :return: sets of potential sentence ids that could be the answer
         """
+        n = max(len(x.split()) for x in entities)
 
         # Get the entity ids matching the input entities as a dict of entity --> its direct/fuzzy matches
-        def get_matching_entity_ids(input_entities: dict) -> dict:
+        def get_matching_entity_ids(input_entities: dict, ngram_level: int) -> dict:
             entity_ids = {}
             q_string = '''
             SELECT 
               entity_id, 
               length(entity) entity_length,
-              levenshtein(entity, '{0}', 2, 1, 2) edit_distance
+              semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) edit_distance
             FROM 
               entities
             WHERE
@@ -272,7 +280,7 @@ class PostgresAPI:
             AND (
               entity LIKE '{0}%%' 
               OR entity LIKE '%%{0}' 
-              OR levenshtein(entity, '{0}', 2, 1, 2) < {2}
+              OR semantic_kb.levenshtein(entity, '{0}', 2, 1, 2) < {2}
             ) 
             ORDER BY entity_length ASC, edit_distance ASC LIMIT 3
             '''
@@ -282,8 +290,10 @@ class PostgresAPI:
                 self.cursor.execute(q_string.format(entity, MAX_ENTITY_LENGTH, ERROR_TOLERANCE))
                 # get set of rows and append to matching_entity_ids set
                 entity_ids[entity] += [int(row[0]) for row in self.cursor.fetchall()]
-                # check if any results returned. If not, go through all ngrams as well
-                for ngrams in input_entities[entity]:
+                # go through all ngrams until some entity match occurs, then break
+                if len(input_entities[entity]) < ngram_level:
+                    continue
+                for ngrams in input_entities[entity][0: len(input_entities[entity]) - ngram_level + 1]:
                     for ngram in ngrams:
                         self.cursor.execute(q_string.format(ngram, MAX_ENTITY_LENGTH, ERROR_TOLERANCE))
                         entity_ids[entity] += [int(row[0]) for row in self.cursor.fetchall()]
@@ -339,10 +349,10 @@ class PostgresAPI:
             # Return the matching sentence_ids grouped under each heading_id
             return {heading: sentence_ids for heading, sentence_ids in self.cursor.fetchall()}
 
-        # Return the number of input frames covered by the sentence ids
-        def get_frame_count(sent_ids: set, input_frames: set) -> int:
+        # Return if any element in sent_ids match any frame in input_frames
+        def check_frame_match(sent_ids: set, input_frames: set) -> bool:
             if len(sent_ids) == 0 or len(input_frames) == 0:
-                return 0
+                return False
             else:
                 frame_param = str(input_frames)[1:-1]
                 sent_param = str(sent_ids)[1:-1]
@@ -354,45 +364,58 @@ class PostgresAPI:
                 #       F.sentence_id IN ({1})
                 # '''.format(frame_param, sent_param))
                 self.cursor.execute('''
-                    SELECT count(DISTINCT F.frame) FROM
-                      (SELECT DISTINCT frame, unnest(sentence_ids) AS sentence_id FROM frames) AS F
-                    WHERE
-                      F.frame IN ({0}) AND
-                      F.sentence_id IN ({1})
-                '''.format(frame_param, sent_param))
+                    SELECT bool_or(sentence_ids && ARRAY[{0}]) AS has_match FROM frames WHERE frame IN ({1})
+                    '''.format(sent_param, frame_param))
                 result = self.cursor.fetchone()[0]
                 return result
 
         # Get entity matching sentences, grouped under headings
-        entity_ids_dict = get_matching_entity_ids(entities)
-        h_grp_match_dict = get_entity_matching_sent_ids(entity_ids_dict)
+        entity_ids_dict = {}
+        h_grp_match_dict = {}
+
+        # Step down ngram size until at least one heading group returned
+        for i in range(n, 0, -1):
+            entity_ids_dict = get_matching_entity_ids(entities, i)
+            h_grp_match_dict = get_entity_matching_sent_ids(entity_ids_dict)
+            if len(h_grp_match_dict) >= MIN_RESULT_COUNT:
+                break
 
         # Print the loaded variables
-        print('# Entities ---> %s' % len(entity_ids_dict))
-        print('# Matches  ---> %s' % sum(len(entity_ids_dict[x]) for x in entity_ids_dict))
+        print('# Question Entities ----> %s' % len(entity_ids_dict))
+        print('# Matched Entities  ----> %s' % sum(len(entity_ids_dict[x]) for x in entity_ids_dict))
+        print('# Headings -------------> %s' % len(h_grp_match_dict))
+        print('# Sentences ------------> %s' % sum(len(h_grp_match_dict[x]) for x in h_grp_match_dict))
 
         if len(frames) == 0:
             return h_grp_match_dict
         else:
-            # Filter out results that does not contain all input frames.
-            frm_fil_h_grp_match_dict = {
+            # Filter out results that does not contain any input frames.
+            # TODO check if best way is to check for existence of ANY frame match, or ALL matches
+            fil_h_grp_match_dict = {
                 heading: h_grp_match_dict[heading]
                 for heading in h_grp_match_dict
-                if get_frame_count(set(h_grp_match_dict[heading]), frames) == len(frames)
+                if check_frame_match(set(h_grp_match_dict[heading]), frames)
             }
-            print('# Filtered ---> %s' % sum(len(frm_fil_h_grp_match_dict[x]) for x in frm_fil_h_grp_match_dict))
-            return frm_fil_h_grp_match_dict
+            print('# Filtered Sentences --------> %s' % sum(len(fil_h_grp_match_dict[x]) for x in fil_h_grp_match_dict))
+            return fil_h_grp_match_dict
 
-    def get_heading_info_by_id(self, heading_id: int) -> list:
+    def get_heading_info_by_ids(self, heading_ids: list) -> dict:
+        if heading_ids is None or len(heading_ids) == 0:
+            return {}
+        h_id_param = str(sorted(heading_ids))[1:-1]
         self.cursor.execute('''
           SELECT
-            (SELECT string_agg(GH.heading, ' > ') FROM get_hierarchy(H.heading_id) GH WHERE GH.index <= 0) heading,
-            (SELECT MIN(sentence_id) FROM sentences AS S WHERE S.heading_id = H.heading_id) first_sentence_id,
-            (SELECT MAX(sentence_id) FROM sentences AS S WHERE S.heading_id = H.heading_id) last_sentence_id
+            H.heading_id,
+            H.heading,
+            MIN(sentence_id) first_sentence_id,
+            MAX(sentence_id) last_sentence_id
           FROM headings as H
-          WHERE heading_id = {0}
-        '''.format(heading_id))
-        return self.cursor.fetchone()
+          NATURAL JOIN sentences as S
+          WHERE heading_id IN ({0})
+          GROUP BY heading_id
+        '''.format(h_id_param))
+        print('Heading info returned...')
+        return {heading_id: (heading, min_id, max_id) for heading_id, heading, min_id, max_id in self.cursor.fetchall()}
 
     def get_heading_content_by_id(self, heading_id: int) -> dict:
         self.cursor.execute('''
@@ -413,4 +436,6 @@ class PostgresAPI:
         if self.maintenance:
             self.cursor.execute('DROP SCHEMA IF EXISTS semantic_kb CASCADE')
             self.cursor.execute('ALTER SCHEMA maintenance RENAME TO semantic_kb')
+            self.cursor.execute('''CREATE EXTENSION IF NOT EXISTS fuzzystrmatch SCHEMA semantic_kb''')
+            self.create_schema()
         self.conn.commit()
