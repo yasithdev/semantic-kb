@@ -39,30 +39,36 @@ class MessageEngine:
                 yield from range(e + 1, min([e + MessageEngine.MAX_SENT_PER_GRP, last + 1]))
 
     @staticmethod
-    def __extract_heading_entities(headings: list) -> next:
+    def __extract_heading_data(headings: list, frame_dict: dict) -> next:
         # assign headings as a 2D list of entities extracted from headings
         for _heading in headings:
             # assuming only one sentence
             # parametrized heading, normalized entity dictionary
             _entities = set([])
-            _dependencies = set([])
+            _frames = set([])
             for pos_tags in _TextParser.generate_pos_tag_sets(_heading):
                 pos_tags = list(pos_tags)
-                entities, dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
-                _entities.update(entities)
-                _dependencies.update(dependencies)
+                _entities.update(_TextParser.extract_entities(pos_tags))
+                _frames.update(_TextParser.get_frames(pos_tags, frame_dict))
             # add entities and content length to heading_entities as LIFO
             _content_length = len(MessageEngine.RE_ALPHANUMERIC.sub('', _heading))
-            yield (_heading, _content_length, _entities)
+            yield (_heading, _content_length, _entities, _frames)
 
     @staticmethod
-    def __get_heading_score(heading_string: str, q_entities: set, q_frames: set) -> float:
+    def __get_heading_score(heading_string: str, q_entities: set, q_frames: set, frame_dict: dict) -> float:
         _score = 0
-        # get the heading entities and print it
-        _heading_entities = MessageEngine.__extract_heading_entities(heading_string.split(' > ')[::-1])
+        # edge cases
+        if len(q_entities) == 0:
+            return _score
+        # get the heading entities and verbs and print it
+        _heading_data = MessageEngine.__extract_heading_data(heading_string.split(' > ')[::-1], frame_dict)
         # calculate entity matching score for entities in each heading
-        for h_index, (heading, h_length, h_entities) in enumerate(_heading_entities):
-            # match entities of current heading against question entities
+        for h_index, (heading, h_length, h_entities, h_frames) in enumerate(_heading_data):
+            # edge cases
+            if len(h_entities) == 0:
+                continue
+            # match entities and frames of current heading against question entities and frames
+            q_frame_hits = len(q_frames.intersection(h_frames))
             q_entity_hit_ratio = 0
             q_entity_hits = 0
             # logic
@@ -78,13 +84,15 @@ class MessageEngine:
                         q_entity_hits += 1
 
             # ratio between [#of q_entities found in current heading] and the [total #of q_entities]
-            _hit_ratio = (q_entity_hit_ratio / q_entity_hits) if q_entity_hits > 0 else 0
-            # ratio between the [length of all entities combined] and the [length of heading]
-            _coherence_factor = sum(len(e) for e in q_entities) / h_length
+            _entity_hit_ratio = (q_entity_hit_ratio / q_entity_hits) if q_entity_hits > 0 else 0
+            # ratio between [#of common frame count] and [#of question frames]
+            _frame_hit_ratio = (q_frame_hits / len(q_frames)) if len(q_frames) > 0 else 0
+            # raw match score for entities using SequenceMatcher
+            _coherence = sum(SequenceMatcher(a=heading_string, b=e).ratio() for e in h_entities)
             # when going to parent headings, dept_weight decreases in square proportion
             _depth_weight = 1 / ((h_index + 1) ** 2)
             # calculate a score for current heading and add to total score
-            _weighted_score = _hit_ratio * _coherence_factor * _depth_weight
+            _weighted_score = _entity_hit_ratio * (1 + _frame_hit_ratio) * _coherence * _depth_weight
             # add weighted score to total score
             _score += _weighted_score
         return _score * 100
@@ -106,7 +114,7 @@ class MessageEngine:
         for pos_tags in _TextParser.generate_pos_tag_sets(input_q.strip('?.,:\n')):
             print(pos_tags)
             # get entities frames, and question score from sentence
-            q_entities, q_dependencies = _TextParser.extract_entities_and_dependencies(pos_tags)
+            q_entities = _TextParser.extract_entities(pos_tags)
             q_frames = _TextParser.get_frames(pos_tags, self.frame_dict)
             q_entities_enhanced = MessageEngine.__expand_entities(q_entities)
             # q_score = self.msg_parser.calculate_score(parsed_string)
@@ -130,7 +138,7 @@ class MessageEngine:
                     match = [
                         h_id,
                         h_string,
-                        self.__get_heading_score(h_string, q_entities, q_frames),
+                        self.__get_heading_score(h_string, q_entities, q_frames, self.frame_dict),
                         self.__merge_adjacent_sent_ids(sent_ids, min_id, max_id)
                     ]
                     scored_matches += [match]

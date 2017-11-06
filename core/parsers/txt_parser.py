@@ -45,7 +45,7 @@ class TextParser:
         return (list(nlp.pos_tag(sentence)) for sentence in nlp.sent_tokenize(input_string))
 
     @staticmethod
-    def get_frames(pos_tags: Iterable, frame_cache: dict) -> set:
+    def get_frames(pos_tags: Iterable, frame_cache: dict, verbose: bool = False) -> set:
         results = set()
 
         # iterate through each token, and create a dict of token -> words
@@ -78,21 +78,14 @@ class TextParser:
             key = '%s__%s' % (search_word, pos)
             if key not in frame_cache:
                 frame_cache[key] = sorted(
-                    set(lu.frame.name for lu in fn.lus(r'(^|\s)(%s)(\s.+)?\.%s' % (search_word, pos))))
+                    set(lu.frame.name for lu in fn.lus(r'(?i)(^|\s)(%s)(\s.+)?\.%s' % (search_word, pos))))
 
             # add the frames from current key to the results set
             results.update(frame_cache[key])
-        # lex_units = fn.lus(
-        #     r'(?i)' +
-        #     # regex for all search words, of all pos tag types
-        #     r'|'.join(
-        #         r'(^|\s)(%s)(\s.+)?\.%s' % (r'|'.join(set(search_words[pos])), pos)
-        #         for pos in dict.keys(search_words)
-        #     )
-        # )
-        # If lex units matched, add them to results
-        # results.update((lexUnit.frame.name for lexUnit in frames))
-        print('Frames: %d' % len(results))
+        if verbose:
+            print('Frames: %d' % len(results))
+        else:
+            print('.', end='', flush=True)
         return results
 
     @staticmethod
@@ -100,7 +93,7 @@ class TextParser:
         return PARSER.parse(Tree('S', (Tree(pos, [t]) for t, pos in pos_tags)))
 
     @staticmethod
-    def extract_entities_and_dependencies(pos_tags: list) -> tuple:
+    def extract_entities(pos_tags: list) -> set:
         """
     Accepts a **POS Tags list**, extract the entities, and return them in normalized form
     of the entities in a dict
@@ -109,7 +102,6 @@ class TextParser:
         :rtype: Set
         """
         normalized_entities = set()
-        dependencies = set()
         for node in breadth_first(TextParser.generate_parse_tree(pos_tags), maxdepth=1):
             # If noun phrase or verb phrase found
             # NOTE: this node is traversed BEFORE traversing to ENT node, which is a leaf node if a VP or NP
@@ -118,15 +110,15 @@ class TextParser:
                 # traverse each entity and parametrize the phrase
                 for leaf in breadth_first(node, maxdepth=1):
                     # continue if leaf is not an entity leaf
-                    if not isinstance(leaf, Tree) or leaf.label() != 'EN':
+                    if not isinstance(leaf, Tree):
                         continue
-                    else:
+                    elif leaf.label() == 'EN':
                         # Generate entity from tree leaves, and add to normalized_entities
                         for entity in nlp.yield_valid_entities(leaf.leaves()):
                             entity = nlp.normalize_text(entity)
                             if entity != '':
                                 normalized_entities.add(entity)
-        return normalized_entities, dependencies
+        return normalized_entities
 
     @staticmethod
     def extract_sentence(pos_tags: list, preserve_entities=False) -> str:

@@ -16,10 +16,10 @@ def __process_content(app: App, headings: list, sentences: list):
         # sentence parsing logic
         for sentence in sents:
             for pos_tags in TextParser.generate_pos_tag_sets(sentence):
-                entities, dependencies = TextParser.extract_entities_and_dependencies(pos_tags)
+                entities = TextParser.extract_entities(pos_tags)
                 sentence = ' '.join(('%s%s%s' % (token, SPLIT_CHAR, pos) for token, pos in pos_tags))
                 # add result to cache
-                app.cache += [(sentence, entities, dependencies, h_id)]
+                app.cache += [(sentence, entities, [], h_id)]
 
     # insert all headings and get the immediate heading id
     heading_id = POSTGRES_API.insert_headings(headings)
