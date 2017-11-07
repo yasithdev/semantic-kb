@@ -1,4 +1,4 @@
-from os import path as os_path
+import os
 
 # Wikifier Configurations
 wikifier = {
@@ -8,5 +8,17 @@ wikifier = {
 # Saml Configurations
 saml = {
     'secret_key': 'secret',
-    'saml_path': os_path.join(os_path.dirname(os_path.dirname(__file__)), 'saml')
+    'saml_path': os.path.join(os.path.dirname(os.path.dirname(__file__)), 'saml')
 }
+
+
+def get_nltk_dependencies():
+    import nltk
+    nltk_data_dir = os.getcwd() + '/env/nltk_data'
+    nltk.download('stopwords', download_dir=nltk_data_dir)
+    nltk.download('framenet_v17', download_dir=nltk_data_dir)
+    nltk.download('wordnet', download_dir=nltk_data_dir)
+
+
+if __name__ == "__main__":
+    get_nltk_dependencies()

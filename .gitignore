@@ -148,3 +148,6 @@ ENV/
 
 ## mypy
 .mypy_cache/
+stanford.zip
+/app.err
+/app.log
