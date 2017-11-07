@@ -70,6 +70,11 @@ class App(Flask):
                     for heading, url, score, answer in self.message_engine.process_and_answer(question)
                 ] if question is not None else []
 
+                def persist_frames():
+                    self.mongo_api.persist_frame_cache(self.mongo_api.FRAMES, self.frame_dict)
+
+                Thread(target=persist_frames).start()
+
                 # output the answers
                 if is_json:
                     return json.dumps({
@@ -117,6 +122,7 @@ class App(Flask):
                     self.populate_frames_progress = (100, 0)
                     self.status = 0
                     app_tasks.finalize()
+                    self.mongo_api.persist_frame_cache(self.mongo_api.FRAMES, self.frame_dict)
 
                 Thread(target=full_init).start()
             return redirect('/progress')

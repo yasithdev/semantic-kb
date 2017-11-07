@@ -87,7 +87,6 @@ def populate_frames(app: App):
         app.populate_frames_progress = (percent, est_time)
     # commit changes to KB
     POSTGRES_API.conn.commit()
-    app.mongo_api.persist_frame_cache(app.mongo_api.FRAMES, app.frame_dict)
     completion_time = datetime.now()
     app.populate_frames_progress = (100, 0)
     print('Done! (time taken: %s seconds)' % (completion_time - start_time).seconds)

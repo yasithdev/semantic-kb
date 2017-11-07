@@ -181,3 +181,7 @@ class TextParser:
 
         # return sanitized sentence
         return entity_sanitized_sent
+
+    @staticmethod
+    def extract_important_tokens(text: str) -> str:
+        return ' '.join(sorted(set(x for x in text.split() if x not in STOPWORDS)))
