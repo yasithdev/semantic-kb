@@ -1,17 +1,30 @@
 #!/usr/bin/env bash
+
+
+# -------------
+# INITIAL SETUP
+# -------------
 echo 'initializing...'
+# Switch to current directory and update apt repository
+cd "${0%/*}"
+apt-get update
+
+
+# ---------
+# VARIABLES
+# ---------
 STANFORD_ZIP_NAME="stanford.zip"
 ENV_DIRNAME="env"
 LIB_DIRNAME="lib"
 STANFORD_POSTAGGER_URL="https://nlp.stanford.edu/software/stanford-postagger-2017-06-09.zip"
 MD5_HASH="607c78634a6aa1f1eebd7f375f720867"
+USERNAME="semantic_kb"
+PASSWORD="semantic_kb"
 
-# Switch to current directory
-cd "${0%/*}"
 
-# Update ubuntu apt repository
-apt-get update
-
+# ----------------------
+# REQUIREMENT - PYTHON 3
+# ----------------------
 # Check if Python3 is available. Install Python3 if not found.
 if [[ $(which python3) != "" ]]; then
     echo -e "\nPython3 installed - OK"
@@ -21,6 +34,15 @@ else
     echo "Python3 Installed!"
 fi
 
+# Install Python3-dev
+echo "Installing Python3-dev..."
+apt install python3-dev
+echo "Python3-dev Installed!"
+
+
+# ---------------------
+# REQUIREMENT - MONGODB
+# ---------------------
 # Check if MongoDB is installed
 if [[ $(which mongo) != "" ]]; then
     echo -e "\nMongoDB installed - OK"
@@ -37,23 +59,26 @@ else
     echo "MongoDB Started!"
 fi
 
+
+# ------------------------
+# REQUIREMENT - POSTGRESQL
+# ------------------------
 # Check if postgres is installed
 if [[ $(which psql) != "" ]]; then
     echo -e "\nPostgreSQL installed - OK"
 else
     echo "PostgreSQL not installed! Installing..."
-    apt-get install postgres
+    apt-get install postgresql postgresql-contrib
     echo "PostgreSQL Installed!"
 
-    echo "Setting up user account for KB access..."
-    sudo -u postgres psql postgres
+    echo "Setting up user account for KB access. Please enter password as $PASSWORD when prompted..."
+    sudo -u postgres createuser -sdP $USERNAME
 fi
 
-# Install Python3-dev
-echo "Installing Python3-dev..."
-apt install python3-dev
-echo "Python3-dev Installed!"
 
+# -------------
+# CONFIGURATION
+# -------------
 # Remove any existing env/ and lib/ directories
 if [[ $(ls -d */ | grep ${ENV_DIRNAME}) == ${ENV_DIRNAME}/ ]]; then
     echo "$ENV_DIRNAME/ found. removing..."
@@ -107,6 +132,8 @@ echo "activating virtual environment..."
 source env/bin/activate
 echo "installing project requirements..."
 pip install -U -r requirements.txt
+
+# Download NLTK dependencies inside virtual environment
 echo "configuring nltk data"
 python config.py
 echo "closing virtual environment..."
