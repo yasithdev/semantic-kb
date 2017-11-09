@@ -9,19 +9,52 @@ MD5_HASH="607c78634a6aa1f1eebd7f375f720867"
 # Switch to current directory
 cd "${0%/*}"
 
-# Check if Python3 is available, or exit if not found.
+# Update ubuntu apt repository
+apt-get update
+
+# Check if Python3 is available. Install Python3 if not found.
 if [[ $(which python3) != "" ]]; then
-    echo "python3 installed - OK"
+    echo -e "\nPython3 installed - OK"
 else
-    echo "Error - python3 not installed. Installing..."
+    echo "Python3 not installed! Installing..."
     apt install python3
+    echo "Python3 Installed!"
 fi
 
-# Install python3 headers
-apt-get update
-apt install python3-dev
+# Check if MongoDB is installed
+if [[ $(which mongo) != "" ]]; then
+    echo -e "\nMongoDB installed - OK"
+else
+    echo "MongoDB not installed! Installing..."
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 0C49F3730359A14518585931BC711F9BA15703C6
+    echo "deb [ arch=amd64 ] http://repo.mongodb.org/apt/ubuntu "$(lsb_release -cs)"/mongodb-org/3.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-3.4.list
+    apt-get update
+    apt-get install -y mongodb-org
+    echo "MongoDB Installed!"
 
-# remove any existing env/ and lib/ directories
+    echo "Starting MongoDB..."
+    service mongod start
+    echo "MongoDB Started!"
+fi
+
+# Check if postgres is installed
+if [[ $(which psql) != "" ]]; then
+    echo -e "\nPostgreSQL installed - OK"
+else
+    echo "PostgreSQL not installed! Installing..."
+    apt-get install postgres
+    echo "PostgreSQL Installed!"
+
+    echo "Setting up user account for KB access..."
+    sudo -u postgres psql postgres
+fi
+
+# Install Python3-dev
+echo "Installing Python3-dev..."
+apt install python3-dev
+echo "Python3-dev Installed!"
+
+# Remove any existing env/ and lib/ directories
 if [[ $(ls -d */ | grep ${ENV_DIRNAME}) == ${ENV_DIRNAME}/ ]]; then
     echo "$ENV_DIRNAME/ found. removing..."
     rm -r ${ENV_DIRNAME}
@@ -31,11 +64,11 @@ if [[ $(ls -d */ | grep ${LIB_DIRNAME}) == ${LIB_DIRNAME}/ ]]; then
     rm -r ${LIB_DIRNAME}
 fi
 
-# create new directories
+# Create new directories
 mkdir ${ENV_DIRNAME}
 mkdir ${LIB_DIRNAME}
 
-# download stanford zip if it does not exist
+# Download stanford zip if it does not exist
 if [[ ($(ls | grep ${STANFORD_ZIP_NAME}) == ${STANFORD_ZIP_NAME}) && ($(md5sum ${STANFORD_ZIP_NAME} | grep -o ${MD5_HASH}) != "") ]]; then
     echo "File found - $STANFORD_ZIP_NAME. Skipping download..."
 else
@@ -43,13 +76,13 @@ else
     curl ${STANFORD_POSTAGGER_URL} > ${STANFORD_ZIP_NAME}
 fi
 
-# unzip contents to lib folders
+# Unzip contents to lib folders
 echo "Unzipping contents from $STANFORD_ZIP_NAME to $LIB_DIRNAME/..."
 unzip -p ${STANFORD_ZIP_NAME} stanford-postagger-2017-06-09/stanford-postagger.jar > ${LIB_DIRNAME}/stanford-postagger.jar
 unzip -p ${STANFORD_ZIP_NAME} stanford-postagger-2017-06-09/models/english-bidirectional-distsim.tagger > ${LIB_DIRNAME}/english-bidirectional-distsim.tagger
 unzip -p ${STANFORD_ZIP_NAME} stanford-postagger-2017-06-09/models/english-left3words-distsim.tagger > ${LIB_DIRNAME}/english-left3words-distsim.tagger
 
-# check if pip installed, else install it
+# Check if pip installed, else install it
 if [[ $(which pip3) != "" ]]; then
     echo "pip installed - OK"
 else
@@ -57,7 +90,7 @@ else
     python3 get-pip.py
 fi
 
-# check if virtualenv installed, else install it
+# Check if virtualenv installed, else install it
 if [[ $(which virtualenv) != "" ]]; then
     echo "virtualenv installed - OK"
 else
@@ -65,11 +98,11 @@ else
     pip3 install virtualenv
 fi
 
-# create virtualenv in project directory
+# Create virtualenv in project directory
 echo "creating virtual environment..."
 virtualenv env -p python3
 
-# activate virtual environment and install dependencies
+# Activate virtual environment and install dependencies
 echo "activating virtual environment..."
 source env/bin/activate
 echo "installing project requirements..."

@@ -13,7 +13,7 @@ def str_conv(iterable: list, start: str = '{', end: str = '}') -> str:
 
 
 class PostgresAPI:
-    def __init__(self, user="postgres", password="1234", database="semantic_kb", maintenance=False) -> None:
+    def __init__(self, user="semantic_kb", password="semantic_kb", database="semantic_kb", maintenance=False) -> None:
         super().__init__()
         self.maintenance = maintenance
         self.schema_name = "semantic_kb" if not self.maintenance else "maintenance"
